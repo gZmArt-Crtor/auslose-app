@@ -254,41 +254,170 @@ function App() {
 
   function exportXlsx() {
     const wb = XLSX.utils.book_new();
-    const aoa = [];
-    // header rows
-    aoa.push([state.company + '   Name:', '', state.name, '', 'Stundenvorlage   Monat: ' + MONTHS[state.month], '','','','','','','','','','', 'Jahr:', state.year]);
-    aoa.push([]);
-    aoa.push(['Tag','Baustelle','Bst.-Nr.','Arbeitszeit','Pause','Sipo, Arbeiter','HFE, HBB, Erder','Sakra, Bediener, Büp, SAS','Sakra PU / TH-Büp','Azf/ Sakra Technik','S/F/P/A','Urlaub','Krank','NA','SO','F','Auslöse','km']);
-    aoa.push(['','','','von-bis']);
-    aoa.push([' ','Übertrag']);
-    for (let d=1; d<=numDays; d++) {
-      const e = state.entries[d];
-      const row = new Array(18).fill('');
-      row[0] = d;
-      if (e) {
-        row[1] = e.site || '';
-        row[2] = e.bst || '';
-        row[3] = e.time || '';
-        row[4] = e.pause || '';
-        const hrs = computeHours(e);
-        const colMap = { F:5,G:6,H:7,I:8,J:9,K:10,L:11,M:12 };
-        let col = 'F';
-        if (e.special === 'sfpa')        col = 'K';
-        else if (e.special === 'urlaub') col = 'L';
-        else if (e.special === 'krank')  col = 'M';
-        else { const r = ROLES.find(x=>x.key===e.role); if (r) col = r.col; }
-        if (hrs) row[colMap[col]] = hrs;
-        row[16] = e.auslose || '';
-        row[17] = e.km || '';
-      }
-      aoa.push(row);
+
+    // Helper to make a cell object with value + style
+    function c(v, opts={}) {
+      const cell = { v, t: typeof v === 'number' ? 'n' : 's' };
+      if (v === '' || v == null) { cell.v = ''; cell.t = 's'; }
+      const s = {};
+      const fn = opts.font || 'Arial';
+      const fs = opts.size || 9;
+      const bold = opts.bold || false;
+      s.font = { name: fn, sz: fs, bold };
+      if (opts.color) s.font.color = { rgb: opts.color };
+      s.alignment = { vertical: opts.valign || 'center', horizontal: opts.halign || 'left', wrapText: opts.wrap || false };
+      cell.s = s;
+      return cell;
     }
-    aoa.push(['','Gesamtstunden','','','', total]);
-    aoa.push(['','zu Guthaben +','','','', guthaben != null && guthaben>0 ? guthaben : '']);
-    aoa.push(['','aus Guthaben -','','','', guthaben != null && guthaben<0 ? Math.abs(guthaben) : '']);
-    aoa.push(['','Stunden zur Abrechnung','','','', state.abrechnung || '']);
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = [{wch:5},{wch:22},{wch:8},{wch:12},{wch:6},{wch:10},{wch:10},{wch:12},{wch:12},{wch:10},{wch:8},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:8},{wch:6}];
+    function cc(v, opts={}) { return c(v, {...opts, halign: opts.halign||'center'}); }
+
+    const ws = {};
+    const colMap = { A:0,B:1,C:2,D:3,E:4,F:5,G:6,H:7,I:8,J:9,K:10,L:11,M:12,N:13,O:14,P:15,Q:16,R:17 };
+    function addr(col, row) { return col + row; }
+    function setCell(col, row, cell) { ws[addr(col,row)] = cell; }
+
+    // ── Row 1 ──
+    setCell('A',1, c('Bahndienste Lang   Name:  ', {size:10}));
+    setCell('C',1, cc(state.name, {size:10}));
+    setCell('E',1, cc('Stundenvorlage   Monat: ' + MONTHS[state.month], {size:9, bold:true}));
+    setCell('L',1, cc('', {size:9, font:'Comic Sans MS'})); // placeholder for extra month field
+    setCell('O',1, c('Jahr:', {size:8, bold:true}));
+    setCell('P',1, cc(state.year, {size:9, font:'Comic Sans MS'}));
+
+    // ── Row 2 ──
+    setCell('H',2, cc('Zuschläge', {size:8}));
+
+    // ── Row 3 headers ──
+    setCell('A',3, cc('Tag',                              {size:9, wrap:true}));
+    setCell('B',3, cc('Baustelle',                        {size:18, wrap:true}));
+    setCell('C',3, cc('Bst.-Nr.',                         {size:8, wrap:true}));
+    setCell('D',3, c ('Arbeitszeit',                      {size:8}));
+    setCell('E',3, cc('Pause',                            {size:8, wrap:true}));
+    setCell('F',3, cc('Sipo, Arbeiter',                   {size:8, wrap:true}));
+    setCell('G',3, cc('HFE, HBB, Erder',                  {size:8, wrap:true}));
+    setCell('H',3, cc('Sakra, Bediener, Büp,    SAS',     {size:8, wrap:true}));
+    setCell('I',3, cc('Sakra in Personal-union /  TH-Büp ',{size:8, wrap:true}));
+    setCell('J',3, cc('Azf/ Sakra Technik',               {size:8, wrap:true}));
+    setCell('K',3, cc('S/F/P/A',                          {size:8}));
+    setCell('L',3, cc('Urlaub',                           {size:8}));
+    setCell('M',3, cc('Krank',                            {size:8}));
+    setCell('N',3, cc('Zuschläge',                        {size:8}));
+    setCell('Q',3, cc('Auslöse',                          {size:8}));
+    setCell('R',3, cc('km',                               {size:8}));
+
+    // ── Row 4 ──
+    setCell('D',4, cc('von-bis', {size:8}));
+    setCell('N',4, cc('NA',      {size:8}));
+    setCell('O',4, cc('SO',      {size:8}));
+    setCell('P',4, cc('F',       {size:8}));
+
+    // ── Row 5 ──
+    setCell('A',5, cc(' ', {size:8}));
+    setCell('B',5, c ('Übertrag', {size:8, valign:'center'}));
+    setCell('D',5, cc(' ', {size:8}));
+
+    // ── Data rows 6–36 ──
+    for (let d = 1; d <= numDays; d++) {
+      const r = d + 5;
+      const e = state.entries[d];
+      setCell('A', r, cc(d, {size:9, bold:true}));
+      if (e) {
+        if (e.site) setCell('B', r, c(e.site, {size:9}));
+        if (e.bst)  setCell('C', r, cc(e.bst ? Number(e.bst)||e.bst : '', {size:9}));
+        if (e.time) setCell('D', r, cc(e.time, {size:9}));
+        if (e.pause && !e.special) setCell('E', r, cc(parseFloat(e.pause), {size:9}));
+        const hrs = computeHours(e);
+        if (hrs) {
+          let hcol = 'F';
+          if (e.special === 'sfpa')        hcol = 'K';
+          else if (e.special === 'urlaub') hcol = 'L';
+          else if (e.special === 'krank')  hcol = 'M';
+          else { const role = ROLES.find(x=>x.key===e.role); if (role) hcol = role.col; }
+          setCell(hcol, r, cc(hrs, {size:9}));
+        }
+        if (e.auslose) setCell('Q', r, c(Number(e.auslose)||e.auslose, {size:9}));
+        if (e.km)      setCell('R', r, c(Number(e.km)||e.km, {size:9}));
+      }
+    }
+
+    // ── Summary rows ──
+    const sr = numDays + 6; // row after last day
+    setCell('B', sr,   c('Gesamtstunden',         {size:9, bold:true}));
+    setCell('F', sr,   cc({f:`SUM(F6:M${sr-1})`}, {size:8}));
+    setCell('B', sr+1, c('zu Guthaben +',          {size:8}));
+    setCell('F', sr+1, cc(guthaben != null && guthaben > 0 ? guthaben : '', {size:8}));
+    setCell('B', sr+2, c('aus Guthaben -',          {size:8}));
+    setCell('F', sr+2, cc(guthaben != null && guthaben < 0 ? Math.abs(guthaben) : '', {size:8}));
+    setCell('B', sr+3, c('Stunden zur Abrechnung',  {size:9, bold:true}));
+    setCell('F', sr+3, cc(state.abrechnung ? parseFloat(state.abrechnung) : '', {size:8}));
+
+    // ── Signature row (row 44) ──
+    setCell('B',44, c(`Datum:  ${new Date().toLocaleDateString('de-DE')}`, {size:11, font:'Calibri'}));
+    setCell('D',44, c(`Unterschrift MA.: ${state.name.split(' ').pop()}`, {size:11, font:'Calibri'}));
+    setCell('L',44, c('PKW Kenzeichen:', {size:11, font:'Calibri', halign:'left'}));
+
+    // ── Sheet range ──
+    ws['!ref'] = 'A1:R44';
+
+    // ── Merged cells (exact match to company template) ──
+    ws['!merges'] = [
+      {s:{r:0,c:2}, e:{r:0,c:3}},   // C1:D1
+      {s:{r:0,c:4}, e:{r:0,c:10}},  // E1:K1
+      {s:{r:0,c:11},e:{r:0,c:13}},  // L1:N1
+      {s:{r:0,c:15},e:{r:0,c:16}},  // P1:Q1
+      {s:{r:2,c:0}, e:{r:3,c:0}},   // A3:A4
+      {s:{r:2,c:1}, e:{r:3,c:1}},   // B3:B4
+      {s:{r:2,c:2}, e:{r:3,c:2}},   // C3:C4
+      {s:{r:2,c:4}, e:{r:3,c:4}},   // E3:E4
+      {s:{r:2,c:5}, e:{r:3,c:5}},   // F3:F4
+      {s:{r:2,c:6}, e:{r:3,c:6}},   // G3:G4
+      {s:{r:2,c:7}, e:{r:3,c:7}},   // H3:H4
+      {s:{r:2,c:8}, e:{r:3,c:8}},   // I3:I4
+      {s:{r:2,c:9}, e:{r:3,c:9}},   // J3:J4
+      {s:{r:2,c:10},e:{r:3,c:10}},  // K3:K4
+      {s:{r:2,c:11},e:{r:3,c:11}},  // L3:L4
+      {s:{r:2,c:12},e:{r:3,c:12}},  // M3:M4
+      {s:{r:2,c:13},e:{r:2,c:15}},  // N3:P3
+      {s:{r:2,c:16},e:{r:3,c:16}},  // Q3:Q4
+      {s:{r:2,c:17},e:{r:3,c:17}},  // R3:R4
+    ];
+
+    // ── Column widths (exact from company file) ──
+    ws['!cols'] = [
+      {wch:2.96},  // A
+      {wch:29.59}, // B
+      {wch:5.51},  // C
+      {wch:23.41}, // D
+      {wch:4.71},  // E
+      {wch:6.72},  // F
+      {wch:7.40},  // G
+      {wch:6.72},  // H (same as F)
+      {wch:7.40},  // I
+      {wch:6.72},  // J
+      {wch:4.98},  // K
+      {wch:6.00},  // L
+      {wch:6.00},  // M
+      {wch:4.98},  // N
+      {wch:4.98},  // O
+      {wch:4.98},  // P
+      {wch:8.61},  // Q
+      {wch:7.53},  // R
+    ];
+
+    // ── Row heights ──
+    const rowH = {};
+    rowH[1] = {hpx:48};
+    rowH[2] = {hpx:12};
+    rowH[3] = {hpx:33};
+    rowH[4] = {hpx:49};
+    rowH[5] = {hpx:25};
+    for (let r=6; r<=numDays+5; r++) rowH[r] = {hpx:38};
+    rowH[sr]   = {hpx:28};
+    rowH[sr+1] = {hpx:25};
+    rowH[sr+2] = {hpx:25};
+    rowH[sr+3] = {hpx:25};
+    ws['!rows'] = Object.entries(rowH).reduce((acc,[k,v])=>{ acc[k-1]=v; return acc; }, []);
+
     XLSX.utils.book_append_sheet(wb, ws, 'Neu');
     XLSX.writeFile(wb, `Auslöse_Art_${MONTHS[state.month]}.xlsx`);
     showToast('Excel exportiert ✓');

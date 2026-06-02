@@ -153,3 +153,5 @@ select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg x
   background: linear-gradient(180deg, var(--panel), var(--bg2)); border: 1px solid var(--line); border-radius: 18px; padding: 20px; box-shadow: 0 20px 70px rgba(0,0,0,.6); }
 .dialog h4 { font-family:'Fraunces',serif; font-weight: 900; font-size: 20px; margin: 0 0 8px; }
 .dialog p { color: var(--ink-dim); font-size: 14px; margin: 0 0 18px; line-height: 1.45; }
+.export-ready-actions { flex-direction: column; }
+.export-ready-actions .btn { width: 100%; justify-content: center; }

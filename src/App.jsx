@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { WEEKDAYS, MONTHS } from './config/constants.js';
 import { computeHours, blankEntry, entryToTimeString, daysInMonth, siteWithAusfall } from './lib/hours.js';
 import { isHoliday } from './lib/holidays.js';
-import { exportXlsx } from './lib/export.js';
+import {
+  buildExportBlob, exportFilename, downloadExportBlob, shareExportBlob, canUseWebShare,
+} from './lib/export.js';
 import {
   loadState, saveState, monthKey, blankMonth,
   serializeBackup, backupFilename, parseBackup,
@@ -10,12 +12,14 @@ import {
 import { APP_VERSION } from './version.js';
 import DayEditor from './components/DayEditor.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
+import ExportReadyDialog from './components/ExportReadyDialog.jsx';
 
 export default function App() {
   const [state, setState] = useState(loadState);
   const [editDay, setEditDay] = useState(null);
   const [toast, setToast] = useState('');
   const [dialog, setDialog] = useState(null);
+  const [exportReady, setExportReady] = useState(null);
   const importRef = useRef();
 
   useEffect(() => { saveState(state); }, [state]);
@@ -24,10 +28,10 @@ export default function App() {
   const closeDialog = useCallback(() => setDialog(null), []);
 
   useEffect(() => {
-    const open = editDay != null || dialog != null;
+    const open = editDay != null || dialog != null || exportReady != null;
     document.body.classList.toggle('modal-open', open);
     return () => document.body.classList.remove('modal-open');
-  }, [editDay, dialog]);
+  }, [editDay, dialog, exportReady]);
 
   const numDays = daysInMonth(state.month, state.year);
   const key = monthKey(state.year, state.month);
@@ -119,19 +123,48 @@ export default function App() {
     showToast('Daten wiederhergestellt ✓');
   }
 
+  const exportParams = useMemo(() => ({
+    name: state.name, pkw: state.pkw, month: state.month, year: state.year,
+    numDays, entries, ausGuthaben: bucket.ausGuthaben, zuGuthaben: bucket.zuGuthaben,
+  }), [state.name, state.pkw, state.month, state.year, numDays, entries, bucket.ausGuthaben, bucket.zuGuthaben]);
+
   async function runExport() {
     showToast('Exportiere…');
     try {
-      const result = await exportXlsx({
-        name: state.name, pkw: state.pkw, month: state.month, year: state.year,
-        numDays, entries, ausGuthaben: bucket.ausGuthaben, zuGuthaben: bucket.zuGuthaben,
-      });
-      if (result === 'shared') showToast('Teilen — App wählen ✓');
-      else if (result === 'downloaded') showToast('Excel heruntergeladen ✓');
-      // cancelled: user closed share sheet — no toast
+      const blob = await buildExportBlob(exportParams);
+      const filename = exportFilename(exportParams);
+      if (canUseWebShare()) {
+        setExportReady({ blob, filename });
+        showToast('Bereit — Teilen oder Herunterladen');
+      } else {
+        downloadExportBlob(blob, filename);
+        showToast('Excel heruntergeladen ✓');
+      }
     } catch (err) {
       showToast('Fehler: ' + err.message);
     }
+  }
+
+  async function onExportShare() {
+    if (!exportReady) return;
+    const { blob, filename } = exportReady;
+    try {
+      await shareExportBlob(blob, filename);
+      setExportReady(null);
+      showToast('Geteilt ✓');
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      downloadExportBlob(blob, filename);
+      setExportReady(null);
+      showToast('Teilen nicht möglich — Datei gespeichert');
+    }
+  }
+
+  function onExportDownload() {
+    if (!exportReady) return;
+    downloadExportBlob(exportReady.blob, exportReady.filename);
+    setExportReady(null);
+    showToast('Excel heruntergeladen ✓');
   }
 
   function onExportClick() {
@@ -279,6 +312,15 @@ export default function App() {
           message="Es ist kein Name eingetragen. Möchtest du den Stundenzettel trotzdem exportieren?"
           confirmLabel="Trotzdem exportieren"
           onConfirm={() => { setDialog(null); runExport(); }} onCancel={closeDialog}
+        />
+      )}
+
+      {exportReady && (
+        <ExportReadyDialog
+          filename={exportReady.filename}
+          onShare={onExportShare}
+          onDownload={onExportDownload}
+          onCancel={() => setExportReady(null)}
         />
       )}
 

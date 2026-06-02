@@ -132,7 +132,7 @@ export function exportFilename(params) {
   return `Auslöse_${safeName}_${MONTHS[params.month]}.xlsx`;
 }
 
-function downloadBlob(blob, filename) {
+export function downloadExportBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -141,20 +141,14 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-// Returns 'shared' | 'downloaded' | 'cancelled'
-async function shareOrDownloadBlob(blob, filename) {
+/** Must run from a click/tap handler (user activation). Do not call after long async work. */
+export async function shareExportBlob(blob, filename) {
   const file = new File([blob], filename, { type: XLSX_MIME });
-  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return 'shared';
-    } catch (err) {
-      if (err.name === 'AbortError') return 'cancelled';
-      // Unsupported or blocked — fall through to download
-    }
-  }
-  downloadBlob(blob, filename);
-  return 'downloaded';
+  await navigator.share({ files: [file], title: filename });
+}
+
+export function canUseWebShare() {
+  return typeof navigator.share === 'function';
 }
 
 // Builds the workbook blob from the template + month data.
@@ -172,9 +166,3 @@ export async function buildExportBlob(params) {
   return zip.generateAsync({ type: 'blob', mimeType: XLSX_MIME });
 }
 
-// Share sheet (WhatsApp, etc.) when supported; otherwise download.
-export async function exportXlsx(params) {
-  const blob = await buildExportBlob(params);
-  const filename = exportFilename(params);
-  return shareOrDownloadBlob(blob, filename);
-}

@@ -122,11 +122,13 @@ export default function App() {
   async function runExport() {
     showToast('Exportiere…');
     try {
-      await exportXlsx({
+      const result = await exportXlsx({
         name: state.name, pkw: state.pkw, month: state.month, year: state.year,
         numDays, entries, ausGuthaben: bucket.ausGuthaben, zuGuthaben: bucket.zuGuthaben,
       });
-      showToast('Excel exportiert ✓');
+      if (result === 'shared') showToast('Teilen — App wählen ✓');
+      else if (result === 'downloaded') showToast('Excel heruntergeladen ✓');
+      // cancelled: user closed share sheet — no toast
     } catch (err) {
       showToast('Fehler: ' + err.message);
     }
@@ -221,7 +223,7 @@ export default function App() {
       </div>
 
       <div className="actions">
-        <button className="btn btn-primary" onClick={onExportClick}>↓ Excel exportieren</button>
+        <button className="btn btn-primary" onClick={onExportClick}>↓ Excel exportieren / teilen</button>
       </div>
       <div className="actions">
         <button className="btn btn-ghost" onClick={downloadBackup}>Daten sichern</button>
@@ -232,7 +234,7 @@ export default function App() {
         <button className="btn btn-ghost" onClick={() => setDialog({ type: 'clear' })}>Monat leeren</button>
       </div>
 
-      <div className="footer">LOKAL GESPEICHERT · KEIN SERVER · {String(state.name || '').toUpperCase()}</div>
+      <div className="footer">RenPG</div>
 
       {editDay && (
         <DayEditor

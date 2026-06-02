@@ -125,9 +125,40 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
   return xml;
 }
 
-// Loads the template, patches one month, and triggers a download in the browser.
-export async function exportXlsx(params) {
-  // Served from public/ (cached by the service worker for offline use).
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+export function exportFilename(params) {
+  const safeName = (params.name || 'Unbekannt').trim().replace(/\s+/g, '_');
+  return `Auslöse_${safeName}_${MONTHS[params.month]}.xlsx`;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Returns 'shared' | 'downloaded' | 'cancelled'
+async function shareOrDownloadBlob(blob, filename) {
+  const file = new File([blob], filename, { type: XLSX_MIME });
+  if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return 'shared';
+    } catch (err) {
+      if (err.name === 'AbortError') return 'cancelled';
+      // Unsupported or blocked — fall through to download
+    }
+  }
+  downloadBlob(blob, filename);
+  return 'downloaded';
+}
+
+// Builds the workbook blob from the template + month data.
+export async function buildExportBlob(params) {
   const templateUrl = `${import.meta.env.BASE_URL}template.xlsx`;
   const resp = await fetch(templateUrl);
   if (!resp.ok) throw new Error('Vorlage nicht gefunden');
@@ -138,12 +169,12 @@ export async function exportXlsx(params) {
   xml = patchSheetXml(xml, params);
   zip.file('xl/worksheets/sheet1.xml', xml);
 
-  const out = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  const url = URL.createObjectURL(out);
-  const a = document.createElement('a');
-  a.href = url;
-  const safeName = (params.name || 'Unbekannt').trim().replace(/\s+/g, '_');
-  a.download = `Auslöse_${safeName}_${MONTHS[params.month]}.xlsx`;
-  a.click();
-  URL.revokeObjectURL(url);
+  return zip.generateAsync({ type: 'blob', mimeType: XLSX_MIME });
+}
+
+// Share sheet (WhatsApp, etc.) when supported; otherwise download.
+export async function exportXlsx(params) {
+  const blob = await buildExportBlob(params);
+  const filename = exportFilename(params);
+  return shareOrDownloadBlob(blob, filename);
 }

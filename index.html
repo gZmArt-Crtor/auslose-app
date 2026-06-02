@@ -186,36 +186,63 @@ function parseTimeRange(str) {
 }
 
 function computeHours(entry) {
-  if (entry.special === 'sfpa' || entry.special === 'urlaub' || entry.special === 'krank') {
+  if (entry.special === 'urlaub' || entry.special === 'krank' || entry.special === 'ausfall'
+      || entry.special === 'schulung' || entry.special === 'bahnarzt') {
     return parseFloat(entry.manualHours) || 0;
   }
-  // Support both new picker fields and legacy time string
-  let dur = null;
+  let total = 0;
   if (entry.startH !== undefined && entry.endH !== undefined) {
-    const start = (+entry.startH) + (+entry.startM||0)/60;
-    let end = (+entry.endH) + (+entry.endM||0)/60;
-    if (end <= start) end += 24;
-    dur = end - start;
+    total += shiftHours(entry.startH, entry.startM, entry.endH, entry.endM, entry.pause);
   } else {
-    dur = parseTimeRange(entry.time);
+    total += parseTimeRange(entry.time) ? (parseTimeRange(entry.time) - (parseFloat(entry.pause)||0)) : 0;
   }
-  if (dur == null) return parseFloat(entry.manualHours) || 0;
-  const pause = parseFloat(entry.pause) || 0;
-  return Math.round((dur - pause) * 100) / 100;
+  // Pure Feiertag with no work time = 8h
+  if (entry.special === 'sfpa' && total === 0) return 8;
+  if (entry.doubleShift) {
+    if (entry.s2ausfall) total += 8;
+    else if (entry.s2startH !== undefined) total += shiftHours(entry.s2startH, entry.s2startM, entry.s2endH, entry.s2endM, entry.s2pause);
+  }
+  return Math.round(total * 100) / 100;
 }
 
 function blankEntry() {
-  return { site:'', bst:'', startH:'7', startM:'00', endH:'15', endM:'30', pause:'0.5', role:'sipo', special:'', manualHours:'', auslose:'', km:'' };
+  return { site:'', bst:'', startH:'7', startM:'00', endH:'15', endM:'30', pause:'0.5', role:'sipo', special:'', manualHours:'', auslose:'', km:'', doubleShift:false, s2startH:'22', s2startM:'00', s2endH:'4', s2endM:'30', s2pause:'0.5', s2role:'sipo' };
+}
+
+function shiftHours(startH, startM, endH, endM, pause) {
+  const start = (+startH) + (+startM||0)/60;
+  let end = (+endH) + (+endM||0)/60;
+  if (end <= start) end += 24;
+  return Math.round(((end - start) - (parseFloat(pause)||0)) * 100) / 100;
+}
+
+function nightHours(startH, startM, endH, endM) {
+  const start = (+startH) + (+startM||0)/60;
+  let end = (+endH) + (+endM||0)/60;
+  if (end <= start) end += 24;
+  const overlapStart = Math.max(start, 22);
+  const overlapEnd = Math.min(end, 30); // 30 = 06:00 next day
+  return overlapEnd > overlapStart ? Math.round((overlapEnd - overlapStart) * 100) / 100 : 0;
 }
 
 function entryToTimeString(e) {
-  if (e.special) return '';
+  if (e.special && e.special !== 'sfpa') return '';
   if (!e.startH && !e.endH) return e.time || '';
   const sh = String(e.startH||'0').padStart(2,'0');
   const sm = String(e.startM||'00').padStart(2,'0');
   const eh = String(e.endH||'0').padStart(2,'0');
   const em = String(e.endM||'00').padStart(2,'0');
-  return `${sh}.${sm} - ${eh}.${em}`;
+  let str = `${sh}.${sm} - ${eh}.${em}`;
+  if (e.doubleShift && !e.s2ausfall) {
+    const s2sh = String(e.s2startH||'0').padStart(2,'0');
+    const s2sm = String(e.s2startM||'00').padStart(2,'0');
+    const s2eh = String(e.s2endH||'0').padStart(2,'0');
+    const s2em = String(e.s2endM||'00').padStart(2,'0');
+    str += ` / ${s2sh}.${s2sm} - ${s2eh}.${s2em}`;
+  } else if (e.doubleShift && e.s2ausfall) {
+    str += ` / Ausfallschicht`;
+  }
+  return str;
 }
 
 function daysInMonth(monthIdx, year) {
@@ -329,15 +356,59 @@ function App() {
         if (e.pause && !e.special) setNum(`E${r}`, parseFloat(e.pause));
         const hrs = computeHours(e);
         if (hrs) {
+          // Shift 1
+          const s1hrs = shiftHours(e.startH||7, e.startM||0, e.endH||15, e.endM||30, e.pause);
           let col = 'F';
-          if      (e.special === 'sfpa')   col = 'K';
-          else if (e.special === 'urlaub') col = 'L';
-          else if (e.special === 'krank')  col = 'M';
+          if      (e.special === 'urlaub')   col = 'L';
+          else if (e.special === 'krank')    col = 'M';
+          else if (e.special === 'ausfall')  col = 'F';
+          else if (e.special === 'schulung' || e.special === 'bahnarzt') col = 'K';
           else { const role = ROLES.find(x=>x.key===e.role); if (role) col = role.col; }
-          setNum(`${col}${r}`, hrs);
+
+          // Pure standalone specials (no work time)
+          if ((e.special === 'schulung' || e.special === 'bahnarzt') && s1hrs === 0) { setNum(`K${r}`, hrs); }
+          else if (e.special === 'urlaub' && s1hrs === 0)  { setNum(`L${r}`, hrs); }
+          else if (e.special === 'krank' && s1hrs === 0)   { setNum(`M${r}`, hrs); }
+          else if (e.special === 'ausfall' && s1hrs === 0) { setNum(`F${r}`, hrs); }
+          // Pure Feiertag (no work) → K (S/F/P/A)
+          else if (e.special === 'sfpa' && s1hrs === 0)    { setNum(`K${r}`, 8); }
+          // Working Feiertag: role column + mirror into P (Zuschläge F)
+          else if (e.special === 'sfpa' && s1hrs > 0) {
+            const roleCol = (ROLES.find(x=>x.key===e.role)||{}).col || 'F';
+            setNum(`${roleCol}${r}`, s1hrs);
+            setNum(`P${r}`, s1hrs);
+          }
+          else if (s1hrs > 0) setNum(`${col}${r}`, s1hrs);
+
+          // Shift 2
+          if (e.doubleShift) {
+            if (e.s2ausfall) {
+              // Ausfallschicht: always 8h Sipo — add to col F
+              const existing = s1hrs && col === 'F' ? s1hrs : 0;
+              setNum(`F${r}`, Math.round((existing + 8)*100)/100);
+            } else {
+              const s2hrs = shiftHours(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, e.s2pause);
+              const s2role = ROLES.find(x=>x.key===e.s2role);
+              const s2col = s2role ? s2role.col : 'F';
+              if (s2hrs > 0) {
+                if (s2col === col) setNum(`${col}${r}`, Math.round((s1hrs + s2hrs)*100)/100);
+                else setNum(`${s2col}${r}`, s2hrs);
+              }
+            }
+          }
         }
         if (e.auslose) setNum(`Q${r}`, Number(e.auslose));
-        if (e.km)      setNum(`R${r}`, Number(e.km));
+
+        // ── SO: if day is Sunday, mirror worked hours into col O ──
+        const isSunday = new Date(state.year, state.month, d).getDay() === 0;
+        if (isSunday && hrs) setNum(`O${r}`, hrs);
+
+        // ── NA: night hours across both shifts ──
+        if (!e.special && e.startH !== undefined) {
+          let totalNight = nightHours(e.startH, e.startM, e.endH, e.endM);
+          if (e.doubleShift) totalNight += nightHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM);
+          if (totalNight > 0) setNum(`N${r}`, totalNight);
+        }
       }
 
       // ── Summary rows (fixed at 38-40) ──
@@ -373,7 +444,7 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.7</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.9</span>
         </div>
         <div className="monthrow">
           <div className="field" style={{flex:2}}>
@@ -540,9 +611,17 @@ function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose
 
         <div className="chips">
           <div className={'chip rust ' + (e.special==='sfpa'?'on':'')} onClick={()=>{
-            if (e.special==='sfpa') { setE(blankEntry()); }
-            else { setE({...blankEntry(), special:'sfpa', site:'Feiertag', manualHours:'8'}); }
+            if (e.special==='sfpa') { upd('special', ''); }
+            else { upd('special', 'sfpa'); }
           }}>Feiertag</div>
+          <div className={'chip ' + (e.special==='schulung'?'on':'')} onClick={()=>{
+            if (e.special==='schulung') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'schulung', site:'Schulung', manualHours:'8'}); }
+          }}>Schulung</div>
+          <div className={'chip ' + (e.special==='bahnarzt'?'on':'')} onClick={()=>{
+            if (e.special==='bahnarzt') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'bahnarzt', site:'Bahnarzt', manualHours:'8'}); }
+          }}>Bahnarzt</div>
           <div className={'chip ' + (e.special==='urlaub'?'on':'')} onClick={()=>{
             if (e.special==='urlaub') { setE(blankEntry()); }
             else { setE({...blankEntry(), special:'urlaub', site:'Urlaub', manualHours:'8'}); }
@@ -551,18 +630,27 @@ function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose
             if (e.special==='krank') { setE(blankEntry()); }
             else { setE({...blankEntry(), special:'krank', site:'Krank', manualHours:'8'}); }
           }}>Krank</div>
+          <div className={'chip ' + (e.special==='ausfall'?'on':'')} onClick={()=>{
+            if (e.special==='ausfall') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'ausfall', site:'Ausfallschicht', manualHours:'8'}); }
+          }}>Ausfallschicht</div>
         </div>
 
-        {e.special ? (
+        {(e.special && e.special !== 'sfpa') ? (
           <div style={{marginTop:14, padding:'12px 14px', background:'var(--panel)', borderRadius:12, border:'1px solid var(--line)'}}>
             <div style={{fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--ink-faint)', marginBottom:4}}>Wird eingetragen:</div>
             <div style={{fontWeight:600, fontSize:16}}>{e.site}</div>
             <div style={{fontFamily:'DM Mono,monospace', fontSize:13, color:'var(--gold)', marginTop:4}}>
-              8h → {e.special==='sfpa'?'S/F/P/A':e.special==='urlaub'?'Urlaub':'Krank'}
+              8h → {e.special==='urlaub'?'Urlaub (L)':e.special==='krank'?'Krank (M)':e.special==='ausfall'?'Sipo (F)':'S/F/P/A (K)'}
             </div>
           </div>
         ) : (
           <>
+            {e.special==='sfpa' && (
+              <div style={{marginTop:12, padding:'9px 12px', background:'rgba(193,89,46,0.15)', borderRadius:10, border:'1px solid var(--rust)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--rust)'}}>
+                🔴 Feiertag aktiv — Arbeitszeit wird zusätzlich in Zuschläge F eingetragen
+              </div>
+            )}
             <div className="formgrid" style={{marginTop:12}}>
               <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>
               <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>
@@ -618,7 +706,66 @@ function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose
                 <div key={r.key} className={'chip ' + (e.role===r.key?'on':'')} onClick={()=>upd('role',r.key)}>{r.label}</div>
               ))}
             </div>
-            {liveHours>0 && <div className="calcnote">→ {liveHours} Std. werden in „{(ROLES.find(r=>r.key===e.role)||{}).label}" eingetragen</div>}
+            {shiftHours(e.startH,e.startM,e.endH,e.endM,e.pause)>0 && <div className="calcnote">→ {shiftHours(e.startH,e.startM,e.endH,e.endM,e.pause)} Std. in „{(ROLES.find(r=>r.key===e.role)||{}).label}"</div>}
+
+            {/* ── Doppelschicht ── */}
+            <div style={{marginTop:14, borderTop:'1px dashed var(--line)', paddingTop:12}}>
+              <div className={'chip ' + (e.doubleShift?'on':'')} style={{marginBottom: e.doubleShift?12:0}}
+                onClick={()=>upd('doubleShift', !e.doubleShift)}>
+                ⚡ Doppelschicht
+              </div>
+            </div>
+
+            {e.doubleShift && <>
+              <div className="chips" style={{marginTop:8}}>
+                <div className={'chip rust ' + (e.s2ausfall?'on':'')} onClick={()=>upd('s2ausfall', !e.s2ausfall)}>
+                  + Ausfallschicht (8h Sipo)
+                </div>
+              </div>
+              {!e.s2ausfall && <>
+              <div className="field" style={{marginTop:8}}>
+              <div className="field" style={{marginTop:4}}>
+                <label>Schicht 2 — Startzeit</label>
+                <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                  <select value={e.s2startH||'22'} onChange={ev=>upd('s2startH',ev.target.value)} style={{flex:1}}>
+                    {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                  </select>
+                  <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                  <select value={e.s2startM||'00'} onChange={ev=>upd('s2startM',ev.target.value)} style={{flex:1}}>
+                    {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="field" style={{marginTop:11}}>
+                <label>Schicht 2 — Endzeit</label>
+                <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                  <select value={e.s2endH||'4'} onChange={ev=>upd('s2endH',ev.target.value)} style={{flex:1}}>
+                    {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                  </select>
+                  <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                  <select value={e.s2endM||'30'} onChange={ev=>upd('s2endM',ev.target.value)} style={{flex:1}}>
+                    {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="field" style={{marginTop:11}}>
+                <label>Schicht 2 — Pause</label>
+                <div className="chips">
+                  {[['0.5','30 min'],['0.75','45 min'],['1','60 min']].map(([val,lbl])=>(
+                    <div key={val} className={'chip ' + (e.s2pause===val?'on':'')} onClick={()=>upd('s2pause',val)}>{lbl}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="roleinfo" style={{marginTop:11}}>Schicht 2 — Tätigkeit:</div>
+              <div className="chips">
+                {ROLES.map(r => (
+                  <div key={r.key} className={'chip ' + (e.s2role===r.key?'on':'')} onClick={()=>upd('s2role',r.key)}>{r.label}</div>
+                ))}
+              </div>
+              {shiftHours(e.s2startH,e.s2startM,e.s2endH,e.s2endM,e.s2pause)>0 && <div className="calcnote">→ {shiftHours(e.s2startH,e.s2startM,e.s2endH,e.s2endM,e.s2pause)} Std. in „{(ROLES.find(r=>r.key===e.s2role)||{}).label}"</div>}
+              </>}
+              {e.s2ausfall && <div className="calcnote" style={{marginTop:6}}>+ 8h Ausfallschicht → Sipo</div>}
+            </>}
           </>
         )}
 

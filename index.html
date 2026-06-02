@@ -173,6 +173,42 @@ const SPECIAL = [
 
 const STORAGE_KEY = 'auslose_v1';
 
+// ── Bavaria public holidays (auto-detect) ──
+function easterDate(year) {
+  const a = year % 19, b = Math.floor(year/100), c = year % 100;
+  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
+  const i = Math.floor(c/4), k = c % 4, l = (32+2*e+2*i-h-k) % 7;
+  const m = Math.floor((a+11*h+22*l)/451);
+  const month = Math.floor((h+l-7*m+114)/31);
+  const day = ((h+l-7*m+114) % 31) + 1;
+  return new Date(year, month-1, day);
+}
+function holidaySet(year) {
+  const e = easterDate(year);
+  const off = (o) => { const x = new Date(e); x.setDate(e.getDate()+o); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; };
+  return new Set([
+    `${year}-01-01`, `${year}-01-06`, off(-2), off(1), `${year}-05-01`,
+    off(39), off(50), off(60), `${year}-08-15`, `${year}-10-03`,
+    `${year}-11-01`, `${year}-12-25`, `${year}-12-26`,
+  ]);
+}
+function isHoliday(year, monthIdx, day) {
+  const d = new Date(year, monthIdx, day);
+  const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return holidaySet(d.getFullYear()).has(key);
+}
+// Hours of a shift that fall within holiday window(s)
+function feiertagOverlap(startH, startM, endH, endM, dayIsHol, nextDayIsHol) {
+  const start = (+startH) + (+startM||0)/60;
+  let end = (+endH) + (+endM||0)/60;
+  if (end <= start) end += 24;
+  let fh = 0;
+  if (dayIsHol) { const segEnd = Math.min(end, 24); if (segEnd > start) fh += segEnd - start; }
+  if (nextDayIsHol && end > 24) fh += end - 24;
+  return Math.round(fh*100)/100;
+}
+
 function parseTimeRange(str) {
   // accepts "7.30 - 16.00", "19.00-7.00", "5.00 - 15.30"
   if (!str) return null;
@@ -186,18 +222,17 @@ function parseTimeRange(str) {
 }
 
 function computeHours(entry) {
-  if (entry.special === 'urlaub' || entry.special === 'krank' || entry.special === 'ausfall'
-      || entry.special === 'schulung' || entry.special === 'bahnarzt') {
+  if (entry.special === 'urlaub' || entry.special === 'krank'
+      || entry.special === 'schulung' || entry.special === 'bahnarzt' || entry.special === 'sfpa') {
     return parseFloat(entry.manualHours) || 0;
   }
+  if (entry.special === 'ausfall' && !entry.startWorked) return 8;
   let total = 0;
   if (entry.startH !== undefined && entry.endH !== undefined) {
     total += shiftHours(entry.startH, entry.startM, entry.endH, entry.endM, entry.pause);
   } else {
     total += parseTimeRange(entry.time) ? (parseTimeRange(entry.time) - (parseFloat(entry.pause)||0)) : 0;
   }
-  // Pure Feiertag with no work time = 8h
-  if (entry.special === 'sfpa' && total === 0) return 8;
   if (entry.doubleShift) {
     if (entry.s2ausfall) total += 8;
     else if (entry.s2startH !== undefined) total += shiftHours(entry.s2startH, entry.s2startM, entry.s2endH, entry.s2endM, entry.s2pause);
@@ -353,46 +388,53 @@ function App() {
         if (e.bst)    setNum(`C${r}`, Number(e.bst) || e.bst);
         const ts = entryToTimeString(e);
         if (ts)       setStr(`D${r}`, ts);
-        if (e.pause && !e.special) setNum(`E${r}`, parseFloat(e.pause));
+        // Pause: write whenever there's a worked shift (not pure special)
+        const hasWork = !['urlaub','krank','schulung','bahnarzt','ausfall','sfpa'].includes(e.special);
+        const isPureSpecial = ['urlaub','krank','schulung','bahnarzt','ausfall','sfpa'].includes(e.special);
+        if (e.pause && !isPureSpecial) setNum(`E${r}`, parseFloat(e.pause));
+
         const hrs = computeHours(e);
         if (hrs) {
-          // Shift 1
           const s1hrs = shiftHours(e.startH||7, e.startM||0, e.endH||15, e.endM||30, e.pause);
-          let col = 'F';
-          if      (e.special === 'urlaub')   col = 'L';
-          else if (e.special === 'krank')    col = 'M';
-          else if (e.special === 'ausfall')  col = 'F';
-          else if (e.special === 'schulung' || e.special === 'bahnarzt') col = 'K';
-          else { const role = ROLES.find(x=>x.key===e.role); if (role) col = role.col; }
 
-          // Pure standalone specials (no work time)
-          if ((e.special === 'schulung' || e.special === 'bahnarzt') && s1hrs === 0) { setNum(`K${r}`, hrs); }
-          else if (e.special === 'urlaub' && s1hrs === 0)  { setNum(`L${r}`, hrs); }
-          else if (e.special === 'krank' && s1hrs === 0)   { setNum(`M${r}`, hrs); }
-          else if (e.special === 'ausfall' && s1hrs === 0) { setNum(`F${r}`, hrs); }
-          // Pure Feiertag (no work) → K (S/F/P/A)
-          else if (e.special === 'sfpa' && s1hrs === 0)    { setNum(`K${r}`, 8); }
-          // Working Feiertag: role column + mirror into P (Zuschläge F)
-          else if (e.special === 'sfpa' && s1hrs > 0) {
-            const roleCol = (ROLES.find(x=>x.key===e.role)||{}).col || 'F';
-            setNum(`${roleCol}${r}`, s1hrs);
-            setNum(`P${r}`, s1hrs);
-          }
-          else if (s1hrs > 0) setNum(`${col}${r}`, s1hrs);
+          // Pure standalone specials (no work)
+          if      (e.special === 'urlaub')   { setNum(`L${r}`, hrs); }
+          else if (e.special === 'krank')    { setNum(`M${r}`, hrs); }
+          else if (e.special === 'schulung' || e.special === 'bahnarzt' || e.special === 'sfpa') { setNum(`K${r}`, hrs); }
+          else if (e.special === 'ausfall') { setNum(`F${r}`, 8); }
+          else {
+            // ── Worked day: figure out role column + auto Feiertag ──
+            const dayHol  = isHoliday(state.year, state.month, d);
+            const nextHol = isHoliday(state.year, state.month, d+1);
 
-          // Shift 2
-          if (e.doubleShift) {
-            if (e.s2ausfall) {
-              // Ausfallschicht: always 8h Sipo — add to col F
-              const existing = s1hrs && col === 'F' ? s1hrs : 0;
-              setNum(`F${r}`, Math.round((existing + 8)*100)/100);
-            } else {
-              const s2hrs = shiftHours(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, e.s2pause);
-              const s2role = ROLES.find(x=>x.key===e.s2role);
-              const s2col = s2role ? s2role.col : 'F';
-              if (s2hrs > 0) {
-                if (s2col === col) setNum(`${col}${r}`, Math.round((s1hrs + s2hrs)*100)/100);
-                else setNum(`${s2col}${r}`, s2hrs);
+            // Shift 1
+            if (s1hrs > 0) {
+              const roleCol = (ROLES.find(x=>x.key===e.role)||{}).col || 'F';
+              setNum(`${roleCol}${r}`, s1hrs);
+              // Feiertag portion of shift 1 → P
+              const fh1 = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
+              if (fh1 > 0) setNum(`P${r}`, fh1);
+            }
+
+            // Shift 2
+            if (e.doubleShift) {
+              if (e.s2ausfall) {
+                const base = (ROLES.find(x=>x.key===e.role)||{}).col === 'F' ? s1hrs : 0;
+                setNum(`F${r}`, Math.round((base + 8)*100)/100);
+              } else {
+                const s2hrs = shiftHours(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, e.s2pause);
+                if (s2hrs > 0) {
+                  const s2col = (ROLES.find(x=>x.key===e.s2role)||{}).col || 'F';
+                  const roleCol = (ROLES.find(x=>x.key===e.role)||{}).col || 'F';
+                  if (s2col === roleCol) setNum(`${s2col}${r}`, Math.round((s1hrs + s2hrs)*100)/100);
+                  else setNum(`${s2col}${r}`, s2hrs);
+                  // Feiertag portion of shift 2 → add to P
+                  const fh2 = feiertagOverlap(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, dayHol, nextHol);
+                  if (fh2 > 0) {
+                    const existingP = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
+                    setNum(`P${r}`, Math.round((existingP + fh2)*100)/100);
+                  }
+                }
               }
             }
           }
@@ -401,7 +443,7 @@ function App() {
 
         // ── SO: if day is Sunday, mirror worked hours into col O ──
         const isSunday = new Date(state.year, state.month, d).getDay() === 0;
-        if (isSunday && hrs) setNum(`O${r}`, hrs);
+        if (isSunday && hrs && !['urlaub','krank','schulung','bahnarzt'].includes(e.special)) setNum(`O${r}`, hrs);
 
         // ── NA: night hours across both shifts ──
         if (!e.special && e.startH !== undefined) {
@@ -444,7 +486,7 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.9</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.5.0</span>
         </div>
         <div className="monthrow">
           <div className="field" style={{flex:2}}>
@@ -529,6 +571,8 @@ function App() {
         <DayEditor
           day={editDay}
           numDays={numDays}
+          year={state.year}
+          month={state.month}
           weekday={weekdayFor(editDay)}
           weekdayFor={weekdayFor}
           entry={state.entries[editDay] || blankEntry()}
@@ -552,7 +596,7 @@ function App() {
   );
 }
 
-function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose, onSave, onClear }) {
+function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, existing, onClose, onSave, onClear }) {
   const [e, setE] = useState(entry);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProg, setOcrProg] = useState('');
@@ -611,8 +655,8 @@ function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose
 
         <div className="chips">
           <div className={'chip rust ' + (e.special==='sfpa'?'on':'')} onClick={()=>{
-            if (e.special==='sfpa') { upd('special', ''); }
-            else { upd('special', 'sfpa'); }
+            if (e.special==='sfpa') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'sfpa', site:'Feiertag', manualHours:'8'}); }
           }}>Feiertag</div>
           <div className={'chip ' + (e.special==='schulung'?'on':'')} onClick={()=>{
             if (e.special==='schulung') { setE(blankEntry()); }
@@ -636,7 +680,7 @@ function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose
           }}>Ausfallschicht</div>
         </div>
 
-        {(e.special && e.special !== 'sfpa') ? (
+        {e.special ? (
           <div style={{marginTop:14, padding:'12px 14px', background:'var(--panel)', borderRadius:12, border:'1px solid var(--line)'}}>
             <div style={{fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--ink-faint)', marginBottom:4}}>Wird eingetragen:</div>
             <div style={{fontWeight:600, fontSize:16}}>{e.site}</div>
@@ -646,9 +690,9 @@ function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose
           </div>
         ) : (
           <>
-            {e.special==='sfpa' && (
-              <div style={{marginTop:12, padding:'9px 12px', background:'rgba(193,89,46,0.15)', borderRadius:10, border:'1px solid var(--rust)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--rust)'}}>
-                🔴 Feiertag aktiv — Arbeitszeit wird zusätzlich in Zuschläge F eingetragen
+            {(isHoliday(year, month, day) || isHoliday(year, month, day+1)) && (
+              <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.15)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--gold)'}}>
+                🎉 {isHoliday(year,month,day) ? 'Feiertag heute' : 'Feiertag morgen'} erkannt — Feiertagsstunden werden automatisch in Zuschläge F berechnet
               </div>
             )}
             <div className="formgrid" style={{marginTop:12}}>

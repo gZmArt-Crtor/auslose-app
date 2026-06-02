@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { MONTHS } from '../config/constants.js';
+import { MONTHS, WEEKDAYS } from '../config/constants.js';
 import { COLUMNS as C, SIPO_COL, roleCol, ROW_OFFSET } from '../config/excelColumns.js';
 import { isHoliday, feiertagOverlap } from './holidays.js';
 import {
@@ -127,9 +127,40 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+function asciiSlug(text) {
+  return (text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^\w.-]+/g, '');
+}
+
+export function exportBasename(params) {
+  const safeName = asciiSlug(params.name || 'Unbekannt') || 'Unbekannt';
+  const mm = String(params.month + 1).padStart(2, '0');
+  return `Auslose_${safeName}_${params.year}-${mm}`;
+}
+
 export function exportFilename(params) {
-  const safeName = (params.name || 'Unbekannt').trim().replace(/\s+/g, '_');
-  return `Auslöse_${safeName}_${MONTHS[params.month]}.xlsx`;
+  return `${exportBasename(params)}.xlsx`;
+}
+
+export function exportCsvFilename(params) {
+  return `${exportBasename(params)}.csv`;
+}
+
+/** Chromium only allows sharing certain types (csv, pdf, images…) — not .xlsx. */
+export function canShareCsvFiles() {
+  if (typeof navigator.share !== 'function' || typeof navigator.canShare !== 'function') {
+    return false;
+  }
+  try {
+    const probe = new File(['x'], 'probe.csv', { type: 'text/csv' });
+    return navigator.canShare({ files: [probe] });
+  } catch {
+    return false;
+  }
 }
 
 export function downloadExportBlob(blob, filename) {
@@ -137,18 +168,78 @@ export function downloadExportBlob(blob, filename) {
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-/** Must run from a click/tap handler (user activation). Do not call after long async work. */
-export async function shareExportBlob(blob, filename) {
-  const file = new File([blob], filename, { type: XLSX_MIME });
-  await navigator.share({ files: [file], title: filename });
+export async function saveExportBlob(blob, filename) {
+  if (typeof window.showSaveFilePicker === 'function') {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{
+          description: 'Excel-Arbeitsmappe',
+          accept: { [XLSX_MIME]: ['.xlsx'] },
+        }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return 'saved';
+    } catch (err) {
+      if (err.name === 'AbortError') return 'cancelled';
+    }
+  }
+  downloadExportBlob(blob, filename);
+  return 'downloaded';
 }
 
-export function canUseWebShare() {
-  return typeof navigator.share === 'function';
+function csvCell(value) {
+  const s = String(value ?? '');
+  if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+export function buildExportCsv(params) {
+  const { year, month, numDays, entries, name, ausGuthaben, zuGuthaben } = params;
+  const rows = [['Tag', 'Wochentag', 'Baustelle', 'Zeiten', 'Stunden'].map(csvCell).join(';')];
+  let total = 0;
+  for (let d = 1; d <= numDays; d++) {
+    const e = entries[d];
+    if (!e) continue;
+    const wd = WEEKDAYS[new Date(year, month, d).getDay()];
+    const site = siteWithAusfall(e) || e.site || '';
+    const ts = entryToTimeString(e);
+    const hrs = computeHours(e);
+    total += hrs;
+    rows.push([d, wd, site, ts, hrs].map(csvCell).join(';'));
+  }
+  total = Math.round(total * 100) / 100;
+  const aus = parseFloat(ausGuthaben) || 0;
+  const zu = parseFloat(zuGuthaben) || 0;
+  const abrechnung = Math.round((total + aus - zu) * 100) / 100;
+  rows.push('');
+  rows.push(['', '', '', 'Gesamt', total].map(csvCell).join(';'));
+  if (aus) rows.push(['', '', '', 'Aus Guthaben +', aus].map(csvCell).join(';'));
+  if (zu) rows.push(['', '', '', 'Zu Guthaben −', zu].map(csvCell).join(';'));
+  rows.push(['', '', '', 'Abrechnung', abrechnung].map(csvCell).join(';'));
+  rows.unshift(csvCell(`${name || 'Stundenzettel'} — ${MONTHS[month]} ${year}`));
+  const bom = '\ufeff';
+  return new Blob([bom + rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+}
+
+/** CSV is shareable in Chrome/Android; call from a tap handler. */
+export async function shareCsvExport(params) {
+  const blob = buildExportCsv(params);
+  const filename = exportCsvFilename(params);
+  const file = new File([blob], filename, { type: 'text/csv' });
+  if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+    throw new Error('Teilen wird hier nicht unterstützt');
+  }
+  await navigator.share({ files: [file] });
 }
 
 // Builds the workbook blob from the template + month data.

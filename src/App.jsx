@@ -3,7 +3,7 @@ import { WEEKDAYS, MONTHS } from './config/constants.js';
 import { computeHours, blankEntry, entryToTimeString, daysInMonth, siteWithAusfall } from './lib/hours.js';
 import { isHoliday } from './lib/holidays.js';
 import {
-  buildExportBlob, exportFilename, downloadExportBlob, shareExportBlob, canUseWebShare,
+  buildExportBlob, exportFilename, saveExportBlob, shareCsvExport, canShareCsvFiles,
 } from './lib/export.js';
 import {
   loadState, saveState, monthKey, blankMonth,
@@ -133,38 +133,31 @@ export default function App() {
     try {
       const blob = await buildExportBlob(exportParams);
       const filename = exportFilename(exportParams);
-      if (canUseWebShare()) {
-        setExportReady({ blob, filename });
-        showToast('Bereit — Teilen oder Herunterladen');
-      } else {
-        downloadExportBlob(blob, filename);
-        showToast('Excel heruntergeladen ✓');
-      }
+      setExportReady({ blob, filename, canShareCsv: canShareCsvFiles() });
+      showToast('Export bereit');
     } catch (err) {
       showToast('Fehler: ' + err.message);
     }
   }
 
-  async function onExportShare() {
+  async function onExportSaveExcel() {
     if (!exportReady) return;
     const { blob, filename } = exportReady;
-    try {
-      await shareExportBlob(blob, filename);
-      setExportReady(null);
-      showToast('Geteilt ✓');
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      downloadExportBlob(blob, filename);
-      setExportReady(null);
-      showToast('Teilen nicht möglich — Datei gespeichert');
-    }
+    const result = await saveExportBlob(blob, filename);
+    if (result === 'cancelled') return;
+    setExportReady(null);
+    showToast(result === 'saved' ? 'Excel gespeichert ✓' : 'Excel heruntergeladen ✓');
   }
 
-  function onExportDownload() {
-    if (!exportReady) return;
-    downloadExportBlob(exportReady.blob, exportReady.filename);
-    setExportReady(null);
-    showToast('Excel heruntergeladen ✓');
+  async function onExportShareCsv() {
+    try {
+      await shareCsvExport(exportParams);
+      setExportReady(null);
+      showToast('CSV geteilt ✓');
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      showToast('Teilen fehlgeschlagen: ' + (err.message || 'unbekannt'));
+    }
   }
 
   function onExportClick() {
@@ -318,8 +311,9 @@ export default function App() {
       {exportReady && (
         <ExportReadyDialog
           filename={exportReady.filename}
-          onShare={onExportShare}
-          onDownload={onExportDownload}
+          canShareCsv={exportReady.canShareCsv}
+          onShareCsv={onExportShareCsv}
+          onSaveExcel={onExportSaveExcel}
           onCancel={() => setExportReady(null)}
         />
       )}

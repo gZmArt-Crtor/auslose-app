@@ -232,7 +232,7 @@ export default function App() {
         <button className="btn btn-ghost" onClick={() => setDialog({ type: 'clear' })}>Monat leeren</button>
       </div>
 
-      <div className="footer">LOKAL GESPEICHERT · KEIN SERVER · {String(state.name || '').toUpperCase()}</div>
+      <div className="footer">RenPG</div>
 
       {editDay && (
         <DayEditor

@@ -306,8 +306,9 @@ function App() {
         );
       }
 
-      // ── Month header ──
+      // ── Month header & Name ──
       setStr('E1', 'Stundenvorlage   Monat: ' + MONTHS[state.month]);
+      setStr('C1', state.name);
 
       // ── Data rows ──
       for (let d = 1; d <= numDays; d++) {
@@ -363,7 +364,7 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.0</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.1</span>
         </div>
         <div className="monthrow">
           <div className="field" style={{flex:2}}>

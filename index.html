@@ -189,14 +189,32 @@ function computeHours(entry) {
   if (entry.special === 'sfpa' || entry.special === 'urlaub' || entry.special === 'krank') {
     return parseFloat(entry.manualHours) || 0;
   }
-  const dur = parseTimeRange(entry.time);
+  // Support both new picker fields and legacy time string
+  let dur = null;
+  if (entry.startH !== undefined && entry.endH !== undefined) {
+    const start = (+entry.startH) + (+entry.startM||0)/60;
+    let end = (+entry.endH) + (+entry.endM||0)/60;
+    if (end <= start) end += 24;
+    dur = end - start;
+  } else {
+    dur = parseTimeRange(entry.time);
+  }
   if (dur == null) return parseFloat(entry.manualHours) || 0;
   const pause = parseFloat(entry.pause) || 0;
   return Math.round((dur - pause) * 100) / 100;
 }
 
 function blankEntry() {
-  return { site:'', bst:'', time:'', pause:'0.5', role:'sipo', special:'', manualHours:'', auslose:'', km:'' };
+  return { site:'', bst:'', startH:'7', startM:'00', endH:'15', endM:'30', pause:'0.5', role:'sipo', special:'', manualHours:'', auslose:'', km:'' };
+}
+
+function entryToTimeString(e) {
+  if (!e.startH && !e.endH) return e.time || '';
+  const sh = String(e.startH||'0').padStart(2,'0');
+  const sm = String(e.startM||'00').padStart(2,'0');
+  const eh = String(e.endH||'0').padStart(2,'0');
+  const em = String(e.endM||'00').padStart(2,'0');
+  return `${sh}.${sm} - ${eh}.${em}`;
 }
 
 function daysInMonth(monthIdx, year) {
@@ -298,7 +316,8 @@ function App() {
         if (!e) continue;
         if (e.site)   setStr(`B${r}`, e.site);
         if (e.bst)    setNum(`C${r}`, Number(e.bst) || e.bst);
-        if (e.time)   setStr(`D${r}`, e.time);
+        const ts = entryToTimeString(e);
+        if (ts)       setStr(`D${r}`, ts);
         if (e.pause && !e.special) setNum(`E${r}`, parseFloat(e.pause));
         const hrs = computeHours(e);
         if (hrs) {
@@ -344,7 +363,13 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.3.0</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.0</span>
+        </div>
+        <div className="monthrow">
+          <div className="field" style={{flex:2}}>
+            <label>Name</label>
+            <input value={state.name} onChange={e=>setState(s=>({...s, name:e.target.value}))} placeholder="Vor- und Nachname" />
+          </div>
         </div>
         <div className="monthrow">
           <div className="field">
@@ -370,7 +395,8 @@ function App() {
           let metaParts = [];
           if (e) {
             if (e.bst) metaParts.push('Bst ' + e.bst);
-            if (e.time) metaParts.push(e.time);
+            const ts = entryToTimeString(e);
+            if (ts) metaParts.push(ts);
           }
           return (
             <div key={day}
@@ -380,7 +406,7 @@ function App() {
               <div className="dayinfo">
                 <div className="wd">{wd}</div>
                 <div className={'site ' + (e&&e.site?'':'empty')}>{e&&e.site ? e.site : 'leer — tippen zum Eintragen'}</div>
-                {metaParts.length>0 && <div className="meta">{metaParts.join('  ·  ')}{e.auslose?<span>  ·  Auslöse {e.auslose}</span>:null}</div>}
+              {metaParts.length>0 && <div className="meta">{metaParts.join('  ·  ')}{e.auslose?<span>  ·  Auslöse {e.auslose}</span>:null}</div>}
               </div>
               {hrs>0 && <div className="hourspill">{hrs}h</div>}
             </div>
@@ -451,7 +477,12 @@ function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) 
       // TP line
       const tpM = text.match(/TP[:\s]+(?:Bf\.?\s*)?([A-Za-zÄÖÜäöüß\-\/ ]{3,40})/);
       const next = {...e};
-      if (timeM) next.time = timeM[1].replace(':','.') + ' - ' + timeM[2].replace(':','.');
+      if (timeM) {
+        const [sh, sm] = timeM[1].replace(':','.').split('.');
+        const [eh, em] = timeM[2].replace(':','.').split('.');
+        next.startH = sh; next.startM = (sm||'00').padEnd(2,'0');
+        next.endH = eh;   next.endM   = (em||'00').padEnd(2,'0');
+      }
       if (tpM) next.site = tpM[1].trim().replace(/\s*\/.*$/,'');
       // pick first plausible Bst (2-3 digit number near "Bst" or standalone)
       const bstLine = text.match(/(\d{2,3})\s*$/m);
@@ -500,11 +531,49 @@ function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) 
               <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" onFocus={ev=>ev.target.select()} /></div>
               <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" onFocus={ev=>ev.target.select()} /></div>
               <div className="field"><label>Auslöse</label><input inputMode="numeric" value={e.auslose} onChange={ev=>upd('auslose',ev.target.value)} placeholder="14" onFocus={ev=>ev.target.select()} /></div>
-              <div className="field"><label>Arbeitszeit (von-bis)</label><input value={e.time} onChange={ev=>upd('time',ev.target.value)} placeholder="7.00 - 15.30" onFocus={ev=>ev.target.select()} /></div>
-              <div className="field"><label>Pause (h)</label><input inputMode="decimal" value={e.pause} onChange={ev=>upd('pause',ev.target.value)} placeholder="0.5" onFocus={ev=>ev.target.select()} /></div>
-              <div className="full field"><label>km (optional)</label><input inputMode="numeric" value={e.km} onChange={ev=>upd('km',ev.target.value)} placeholder="" onFocus={ev=>ev.target.select()} /></div>
             </div>
-            <div className="roleinfo">Tätigkeit → Spalte für die Stunden:</div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Startzeit</label>
+              <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                <select value={e.startH||'7'} onChange={ev=>upd('startH',ev.target.value)} style={{flex:1}}>
+                  {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                </select>
+                <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                <select value={e.startM||'00'} onChange={ev=>upd('startM',ev.target.value)} style={{flex:1}}>
+                  {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Endzeit</label>
+              <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                <select value={e.endH||'15'} onChange={ev=>upd('endH',ev.target.value)} style={{flex:1}}>
+                  {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                </select>
+                <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                <select value={e.endM||'30'} onChange={ev=>upd('endM',ev.target.value)} style={{flex:1}}>
+                  {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Pause</label>
+              <div className="chips">
+                {[['0.5','30 min'],['0.75','45 min'],['1','60 min']].map(([val,lbl])=>(
+                  <div key={val} className={'chip ' + (e.pause===val?'on':'')} onClick={()=>upd('pause',val)}>{lbl}</div>
+                ))}
+              </div>
+            </div>
+
+            <div className="full field" style={{marginTop:11}}>
+              <label>km (optional)</label>
+              <input inputMode="numeric" value={e.km} onChange={ev=>upd('km',ev.target.value)} placeholder="" onFocus={ev=>ev.target.select()} />
+            </div>
+
+            <div className="roleinfo" style={{marginTop:11}}>Tätigkeit → Spalte für die Stunden:</div>
             <div className="chips">
               {ROLES.map(r => (
                 <div key={r.key} className={'chip ' + (e.role===r.key?'on':'')} onClick={()=>upd('role',r.key)}>{r.label}</div>

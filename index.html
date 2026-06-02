@@ -496,7 +496,7 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.5.0</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.5.1</span>
         </div>
         <div className="monthrow">
           <div className="field" style={{flex:2}}>
@@ -701,32 +701,44 @@ function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, exis
         ) : (
           <>
             {(()=>{
+              // Only calculate if shift times are set
+              if (!e.startH || !e.endH) return null;
+              const start = (+e.startH) + (+e.startM||0)/60;
+              const end0  = (+e.endH)   + (+e.endM||0)/60;
+              const end   = end0 <= start ? end0 + 24 : end0;
+
               const todayHol = isHoliday(year, month, day);
               const nextHol  = isHoliday(year, month, day+1);
-              const hasShift = e.startH !== undefined;
-              if (!todayHol && !nextHol) return null;
-              if (!todayHol && nextHol) {
-                // Only show if shift actually crosses midnight
-                if (!hasShift) return null;
-                const start = (+e.startH) + (+e.startM||0)/60;
-                const end0  = (+e.endH)   + (+e.endM||0)/60;
-                const end   = end0 <= start ? end0 + 24 : end0;
-                if (end <= 24) return null; // doesn't cross midnight
-                const overlapH = end - 24;
-                const overlapRounded = Math.round(overlapH*100)/100;
-                const fromTime = '00:00';
-                const toH = Math.floor(end-24); const toM = Math.round(((end-24)%1)*60);
-                const toTime = `${String(toH).padStart(2,'0')}:${String(toM).padStart(2,'0')}`;
-                return (
-                  <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.12)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--gold)'}}>
-                    🌙 Nachtschicht endet in Feiertag — {overlapRounded}h Feiertagszuschlag ({fromTime}–{toTime}) → Zuschläge F
-                  </div>
-                );
+
+              // Feiertag intersection
+              let feierStart = null, feierEnd = null;
+              if (todayHol) { feierStart = start; feierEnd = Math.min(end, 24); }
+              if (nextHol && end > 24) {
+                if (feierStart === null) { feierStart = 24; feierEnd = end; }
+                else feierEnd = end; // both days holiday
               }
-              // Today is holiday
+
+              // Night shift intersection (22:00–06:00)
+              const nightStart = 22, nightEnd = 30;
+              const nStart = Math.max(start, nightStart);
+              const nEnd   = Math.min(end, nightEnd);
+              const hasNight = nEnd > nStart;
+
+              if (!feierStart && !hasNight) return null;
+
+              const fmt = (h) => {
+                const hh = Math.floor(h % 24); const mm = Math.round((h%1)*60);
+                return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+              };
+
               return (
-                <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.15)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--gold)'}}>
-                  🎉 Feiertag heute — Arbeitszeit wird automatisch in Zuschläge F berechnet
+                <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.12)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:11, color:'var(--gold)', display:'flex', flexDirection:'column', gap:4}}>
+                  {feierStart !== null && feierEnd > feierStart && (
+                    <span>🎉 Feiertagszuschlag: {fmt(feierStart)} – {fmt(feierEnd)} ({Math.round((feierEnd-feierStart)*100)/100}h) → Zuschläge F</span>
+                  )}
+                  {hasNight && (
+                    <span>🌙 Nachtzuschlag: {fmt(nStart)} – {fmt(nEnd)} ({Math.round((nEnd-nStart)*100)/100}h) → NA</span>
+                  )}
                 </div>
               );
             })()}

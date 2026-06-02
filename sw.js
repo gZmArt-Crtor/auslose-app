@@ -1,5 +1,5 @@
 // ⬆ bump this every time you upload a new version
-const CACHE = 'auslose-v146';
+const CACHE = 'auslose-v147';
 
 const ASSETS = [
   './',

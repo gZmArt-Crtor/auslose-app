@@ -411,9 +411,13 @@ function App() {
             if (s1hrs > 0) {
               const roleCol = (ROLES.find(x=>x.key===e.role)||{}).col || 'F';
               setNum(`${roleCol}${r}`, s1hrs);
-              // Feiertag portion of shift 1 → P
-              const fh1 = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
-              if (fh1 > 0) setNum(`P${r}`, fh1);
+              // Feiertag portion → P: ratio of holiday-overlap to total raw duration, applied to worked hrs
+              if (dayHol || nextHol) {
+                const rawDur = shiftHours(e.startH||7, e.startM||0, e.endH||15, e.endM||30, 0); // no pause
+                const rawOverlap = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
+                const fh1 = rawDur > 0 ? Math.round((s1hrs * rawOverlap / rawDur)*100)/100 : 0;
+                if (fh1 > 0) setNum(`P${r}`, fh1);
+              }
             }
 
             // Shift 2
@@ -429,10 +433,16 @@ function App() {
                   if (s2col === roleCol) setNum(`${s2col}${r}`, Math.round((s1hrs + s2hrs)*100)/100);
                   else setNum(`${s2col}${r}`, s2hrs);
                   // Feiertag portion of shift 2 → add to P
-                  const fh2 = feiertagOverlap(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, dayHol, nextHol);
-                  if (fh2 > 0) {
-                    const existingP = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
-                    setNum(`P${r}`, Math.round((existingP + fh2)*100)/100);
+                  if (dayHol || nextHol) {
+                    const s2RawDur = shiftHours(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, 0);
+                    const s2RawOverlap = feiertagOverlap(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, dayHol, nextHol);
+                    const fh2 = s2RawDur > 0 ? Math.round((s2hrs * s2RawOverlap / s2RawDur)*100)/100 : 0;
+                    if (fh2 > 0) {
+                      const rawDur1 = shiftHours(e.startH||7, e.startM||0, e.endH||15, e.endM||30, 0);
+                      const rawOvlp1 = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
+                      const fh1 = rawDur1 > 0 ? Math.round((s1hrs * rawOvlp1 / rawDur1)*100)/100 : 0;
+                      setNum(`P${r}`, Math.round((fh1 + fh2)*100)/100);
+                    }
                   }
                 }
               }

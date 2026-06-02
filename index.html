@@ -209,6 +209,7 @@ function blankEntry() {
 }
 
 function entryToTimeString(e) {
+  if (e.special) return '';
   if (!e.startH && !e.endH) return e.time || '';
   const sh = String(e.startH||'0').padStart(2,'0');
   const sm = String(e.startM||'00').padStart(2,'0');

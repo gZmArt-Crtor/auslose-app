@@ -1,6 +1,9 @@
 import React from 'react';
+import { useBackToClose } from '../hooks/useBackToClose.js';
 
 export default function ConfirmDialog({ title, message, confirmLabel = 'Bestätigen', cancelLabel = 'Abbrechen', danger, onConfirm, onCancel }) {
+  useBackToClose(true, onCancel);
+
   return (
     <>
       <div className="scrim" onClick={onCancel}></div>

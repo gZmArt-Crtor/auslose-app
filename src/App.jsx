@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { WEEKDAYS, MONTHS } from './config/constants.js';
 import { computeHours, blankEntry, entryToTimeString, daysInMonth, siteWithAusfall } from './lib/hours.js';
 import { isHoliday } from './lib/holidays.js';
@@ -19,6 +19,15 @@ export default function App() {
   const importRef = useRef();
 
   useEffect(() => { saveState(state); }, [state]);
+
+  const closeEditor = useCallback(() => setEditDay(null), []);
+  const closeDialog = useCallback(() => setDialog(null), []);
+
+  useEffect(() => {
+    const open = editDay != null || dialog != null;
+    document.body.classList.toggle('modal-open', open);
+    return () => document.body.classList.remove('modal-open');
+  }, [editDay, dialog]);
 
   const numDays = daysInMonth(state.month, state.year);
   const key = monthKey(state.year, state.month);
@@ -235,7 +244,7 @@ export default function App() {
           weekdayFor={weekdayFor}
           entry={entries[editDay] || blankEntry()}
           existing={!!entries[editDay]}
-          onClose={() => setEditDay(null)}
+          onClose={closeEditor}
           onSave={(en, extraDays) => {
             saveDays(editDay, en, extraDays);
             const cnt = 1 + (extraDays || []).length;
@@ -251,7 +260,7 @@ export default function App() {
           title="Monat leeren?"
           message={`Alle Einträge sowie Guthaben für ${MONTHS[state.month]} ${state.year} werden gelöscht. Andere Monate bleiben erhalten.`}
           confirmLabel="Leeren" danger
-          onConfirm={clearMonth} onCancel={() => setDialog(null)}
+          onConfirm={clearMonth} onCancel={closeDialog}
         />
       )}
       {dialog && dialog.type === 'import' && (
@@ -259,7 +268,7 @@ export default function App() {
           title="Daten wiederherstellen?"
           message="Alle Daten auf diesem Gerät werden durch die Sicherung ersetzt. Fortfahren?"
           confirmLabel="Ersetzen" danger
-          onConfirm={() => doImport(dialog.imported)} onCancel={() => setDialog(null)}
+          onConfirm={() => doImport(dialog.imported)} onCancel={closeDialog}
         />
       )}
       {dialog && dialog.type === 'exportNoName' && (
@@ -267,7 +276,7 @@ export default function App() {
           title="Kein Name eingetragen"
           message="Es ist kein Name eingetragen. Möchtest du den Stundenzettel trotzdem exportieren?"
           confirmLabel="Trotzdem exportieren"
-          onConfirm={() => { setDialog(null); runExport(); }} onCancel={() => setDialog(null)}
+          onConfirm={() => { setDialog(null); runExport(); }} onCancel={closeDialog}
         />
       )}
 

@@ -16,6 +16,10 @@
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; background: var(--bg); }
+body.modal-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 body {
   font-family: 'DM Sans', sans-serif;
   color: var(--ink);
@@ -107,11 +111,24 @@ select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg x
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 101; max-width: 720px; margin: 0 auto;
   background: linear-gradient(180deg, var(--panel), var(--bg2)); border: 1px solid var(--line);
   border-radius: 22px 22px 0 0; padding: 8px 16px calc(env(safe-area-inset-bottom) + 20px);
-  max-height: 92vh; overflow-y: auto; transform: translateY(100%); animation: slideup .28s cubic-bezier(.2,.9,.3,1) forwards;
+  max-height: 92vh; overflow-y: auto; overscroll-behavior: contain;
+  transform: translateY(100%); animation: slideup .28s cubic-bezier(.2,.9,.3,1) forwards;
   box-shadow: 0 -20px 60px rgba(0,0,0,.5);
 }
+.sheet.sheet-dragging { animation: none; transition: none; }
+.sheet.sheet-dismissing { animation: none; transition: transform .22s ease-in; transform: translateY(100%); }
 @keyframes slideup { to { transform: translateY(0); } }
-.grab { width: 42px; height: 5px; background: var(--line); border-radius: 3px; margin: 6px auto 14px; }
+.sheet-handle {
+  touch-action: none;
+  cursor: grab;
+  padding: 4px 0 2px;
+  margin: 0 -8px 8px;
+}
+.grab { width: 42px; height: 5px; background: var(--line); border-radius: 3px; margin: 0 auto 6px; }
+.sheet-hint {
+  margin: 0; text-align: center; font-family: 'DM Mono', monospace;
+  font-size: 9px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ink-faint);
+}
 .sheet h3 { font-family:'Fraunces',serif; font-weight: 900; font-size: 24px; margin: 0 0 2px; }
 .sheet .sub { font-family:'DM Mono',monospace; font-size: 11px; color: var(--ink-faint); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; }
 .formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }

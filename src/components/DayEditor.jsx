@@ -3,8 +3,14 @@ import Tesseract from 'tesseract.js';
 import { ROLES } from '../config/constants.js';
 import { isHoliday } from '../lib/holidays.js';
 import { shiftHours, blankEntry, specialEntry, normalizeEntry, isPureSpecial } from '../lib/hours.js';
+import { useBackToClose } from '../hooks/useBackToClose.js';
+import { useSheetSwipe } from '../hooks/useSheetSwipe.js';
 
 export default function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, existing, onClose, onSave, onClear }) {
+  const sheetRef = useRef(null);
+  useBackToClose(true, onClose);
+  useSheetSwipe(onClose, sheetRef);
+
   const [e, setE] = useState(() => (isPureSpecial(entry) ? normalizeEntry(entry) : entry));
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProg, setOcrProg] = useState('');
@@ -44,10 +50,13 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
 
   return (
     <>
-      <div className="scrim" onClick={onClose}></div>
-      <div className="sheet">
-        <div className="grab"></div>
-        <h3>Tag {day}</h3>
+      <div className="scrim" onClick={onClose} aria-hidden="true"></div>
+      <div className="sheet" ref={sheetRef} role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+        <div className="sheet-handle">
+          <div className="grab" aria-hidden="true"></div>
+          <p className="sheet-hint">Nach unten wischen zum Schließen</p>
+        </div>
+        <h3 id="sheet-title">Tag {day}</h3>
         <div className="sub">{weekday} · {existing ? 'bearbeiten' : 'neuer Eintrag'}{dayIsHoliday ? ' · Feiertag' : ''}</div>
 
         {dayIsHoliday && !e.special && (

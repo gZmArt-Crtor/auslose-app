@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#1a1410" />
+<title>Auslöse Stundenzettel</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1410;
+    --bg2: #221a13;
+    --panel: #2b2018;
+    --panel-hi: #34271d;
+    --line: #3d2f23;
+    --ink: #f2e8db;
+    --ink-dim: #b9a892;
+    --ink-faint: #8a7560;
+    --gold: #e0a443;
+    --gold-soft: #c89236;
+    --rust: #c1592e;
+    --green: #6f9e54;
+    --red: #d4624a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(224,164,67,0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(193,89,46,0.07), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #root { max-width: 720px; margin: 0 auto; padding: 0 14px 120px; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    padding: calc(env(safe-area-inset-top) + 16px) 4px 14px;
+    background: linear-gradient(180deg, var(--bg) 60%, rgba(26,20,16,0.85) 85%, transparent);
+    backdrop-filter: blur(4px);
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand h1 {
+    font-family: 'Fraunces', serif; font-weight: 900; font-size: 30px;
+    margin: 0; letter-spacing: -0.5px; line-height: 1;
+    background: linear-gradient(180deg, #f6e7c8, var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .brand .tag { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 2px; }
+  .monthrow { display: flex; gap: 8px; margin-top: 12px; }
+  .field { flex: 1; }
+  .field label { display: block; font-family:'DM Mono',monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 5px 2px; }
+  input, select, textarea {
+    width: 100%; font-family: 'DM Sans', sans-serif; font-size: 16px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 10px; padding: 11px 12px; outline: none; transition: border-color .15s, background .15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--gold-soft); background: var(--panel-hi); }
+  select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%23b9a892' stroke-width='1.5' fill='none'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+  .daygrid { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+  .daycard {
+    background: linear-gradient(180deg, var(--panel), var(--bg2));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 11px 12px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: transform .12s, border-color .15s, box-shadow .15s; position: relative; overflow: hidden;
+  }
+  .daycard:active { transform: scale(0.985); }
+  .daycard.filled { border-color: #4a3826; }
+  .daycard.weekend { background: linear-gradient(180deg, #241a13, #1d1610); }
+  .daycard.feier { border-color: var(--gold-soft); }
+  .daynum {
+    flex: 0 0 42px; height: 42px; border-radius: 11px; display: grid; place-items: center;
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--ink-dim);
+  }
+  .daycard.filled .daynum { background: linear-gradient(160deg, var(--gold), var(--gold-soft)); color: #2a1c0c; border-color: transparent; }
+  .daycard.feier .daynum { background: linear-gradient(160deg, var(--rust), #9c3f1e); color: #fff; }
+  .dayinfo { flex: 1; min-width: 0; }
+  .dayinfo .wd { font-family:'DM Mono',monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-faint); }
+  .dayinfo .site { font-weight: 600; font-size: 16px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dayinfo .site.empty { color: var(--ink-faint); font-weight: 400; font-style: italic; }
+  .dayinfo .meta { font-family:'DM Mono',monospace; font-size: 11.5px; color: var(--gold); margin-top: 2px; }
+  .dayinfo .meta span { color: var(--ink-faint); }
+  .hourspill { flex: 0 0 auto; font-family:'DM Mono',monospace; font-weight: 500; font-size: 13px; color: var(--ink-dim); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+
+  .totals { margin-top: 18px; background: linear-gradient(180deg, var(--panel-hi), var(--bg2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .totals h2 { font-family:'DM Mono',monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 12px; }
+  .totrow { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+  .totrow:last-child { border-bottom: 0; }
+  .totrow .lbl { color: var(--ink-dim); font-size: 14px; }
+  .totrow .val { font-family:'DM Mono',monospace; font-size: 17px; font-weight: 500; }
+  .totrow .val.big { color: var(--gold); font-size: 20px; }
+  .totrow input { width: 90px; text-align: right; font-family:'DM Mono',monospace; padding: 7px 9px; font-size: 16px; }
+
+  .actions { display: flex; gap: 9px; margin-top: 16px; }
+  .btn {
+    flex: 1; border: none; border-radius: 12px; padding: 15px 12px; font-family: 'DM Sans', sans-serif;
+    font-weight: 700; font-size: 15px; cursor: pointer; transition: transform .12s, filter .15s; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: linear-gradient(160deg, var(--gold), var(--gold-soft)); color: #2a1c0c; }
+  .btn-ghost { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  .btn-rust { background: linear-gradient(160deg, var(--rust), #9c3f1e); color: #fff; }
+
+  /* Sheet / modal */
+  .scrim { position: fixed; inset: 0; background: rgba(10,7,5,0.6); backdrop-filter: blur(3px); z-index: 100; opacity: 0; animation: fade .2s forwards; }
+  @keyframes fade { to { opacity: 1; } }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 101; max-width: 720px; margin: 0 auto;
+    background: linear-gradient(180deg, var(--panel), var(--bg2)); border: 1px solid var(--line);
+    border-radius: 22px 22px 0 0; padding: 8px 16px calc(env(safe-area-inset-bottom) + 20px);
+    max-height: 92vh; overflow-y: auto; transform: translateY(100%); animation: slideup .28s cubic-bezier(.2,.9,.3,1) forwards;
+    box-shadow: 0 -20px 60px rgba(0,0,0,.5);
+  }
+  @keyframes slideup { to { transform: translateY(0); } }
+  .grab { width: 42px; height: 5px; background: var(--line); border-radius: 3px; margin: 6px auto 14px; }
+  .sheet h3 { font-family:'Fraunces',serif; font-weight: 900; font-size: 24px; margin: 0 0 2px; }
+  .sheet .sub { font-family:'DM Mono',monospace; font-size: 11px; color: var(--ink-faint); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; }
+  .formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  .formgrid .full { grid-column: 1 / -1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 4px 0 2px; }
+  .chip { font-family:'DM Mono',monospace; font-size: 12px; padding: 7px 11px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim); cursor: pointer; transition: all .12s; }
+  .chip.on { background: linear-gradient(160deg, var(--gold), var(--gold-soft)); color: #2a1c0c; border-color: transparent; font-weight: 600; }
+  .chip.rust.on { background: linear-gradient(160deg, var(--rust), #9c3f1e); color: #fff; }
+  .calcnote { font-family:'DM Mono',monospace; font-size: 12px; color: var(--green); margin: 6px 2px 0; }
+  .sheet .actions { margin-top: 18px; }
+
+  .ocrbox { border: 1px dashed var(--line); border-radius: 12px; padding: 14px; text-align: center; color: var(--ink-faint); font-size: 13px; margin-bottom: 14px; }
+  .ocrbox.busy { border-color: var(--gold-soft); color: var(--gold); }
+  .ocrprog { font-family:'DM Mono',monospace; font-size: 11px; margin-top: 6px; }
+  .roleinfo { font-family:'DM Mono',monospace; font-size:11px; color: var(--ink-faint); margin: 2px 2px 0; }
+  .hide { display: none; }
+  .footer { text-align: center; font-family:'DM Mono',monospace; font-size: 10px; color: var(--ink-faint); letter-spacing: 1px; margin-top: 28px; }
+  .toast { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 20px); left: 50%; transform: translateX(-50%); background: var(--green); color: #0e1a08; font-weight: 600; padding: 12px 20px; border-radius: 12px; z-index: 200; font-size: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.4); animation: fade .2s; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef } = React;
+
+const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+// Column roles -> which sheet column the worked hours go into
+const ROLES = [
+  { key: 'sipo',  label: 'Sipo/Arbeiter', col: 'F' },
+  { key: 'hfe',   label: 'HFE/HBB/Erder', col: 'G' },
+  { key: 'sakra', label: 'Sakra/Bediener/Büp', col: 'H' },
+  { key: 'sakrapu', label: 'Sakra PU/TH-Büp', col: 'I' },
+  { key: 'azf',   label: 'Azf/Sakra Technik', col: 'J' },
+];
+const SPECIAL = [
+  { key: 'sfpa',  label: 'S/F/P/A (Feiertag)', col: 'K' },
+  { key: 'urlaub',label: 'Urlaub', col: 'L' },
+  { key: 'krank', label: 'Krank', col: 'M' },
+];
+
+const STORAGE_KEY = 'auslose_v1';
+
+// ── Bavaria public holidays (auto-detect) ──
+function easterDate(year) {
+  const a = year % 19, b = Math.floor(year/100), c = year % 100;
+  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
+  const i = Math.floor(c/4), k = c % 4, l = (32+2*e+2*i-h-k) % 7;
+  const m = Math.floor((a+11*h+22*l)/451);
+  const month = Math.floor((h+l-7*m+114)/31);
+  const day = ((h+l-7*m+114) % 31) + 1;
+  return new Date(year, month-1, day);
+}
+function holidaySet(year) {
+  const e = easterDate(year);
+  const off = (o) => { const x = new Date(e); x.setDate(e.getDate()+o); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`; };
+  return new Set([
+    `${year}-01-01`, `${year}-01-06`, off(-2), off(1), `${year}-05-01`,
+    off(39), off(50), off(60), `${year}-08-15`, `${year}-10-03`,
+    `${year}-11-01`, `${year}-12-25`, `${year}-12-26`,
+  ]);
+}
+function isHoliday(year, monthIdx, day) {
+  const d = new Date(year, monthIdx, day);
+  const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return holidaySet(d.getFullYear()).has(key);
+}
+// Hours of a shift that fall within holiday window(s)
+function feiertagOverlap(startH, startM, endH, endM, dayIsHol, nextDayIsHol) {
+  const start = (+startH) + (+startM||0)/60;
+  let end = (+endH) + (+endM||0)/60;
+  if (end <= start) end += 24;
+  let fh = 0;
+  if (dayIsHol) { const segEnd = Math.min(end, 24); if (segEnd > start) fh += segEnd - start; }
+  if (nextDayIsHol && end > 24) fh += end - 24;
+  return Math.round(fh*100)/100;
+}
+
+function parseTimeRange(str) {
+  // accepts "7.30 - 16.00", "19.00-7.00", "5.00 - 15.30"
+  if (!str) return null;
+  const m = str.replace(/\s/g,'').match(/(\d{1,2})[.:](\d{2})-(\d{1,2})[.:](\d{2})/);
+  if (!m) return null;
+  let [_, h1, m1, h2, m2] = m;
+  let start = (+h1) + (+m1)/60;
+  let end = (+h2) + (+m2)/60;
+  if (end <= start) end += 24; // overnight
+  return end - start;
+}
+
+function computeHours(entry) {
+  if (entry.special === 'urlaub' || entry.special === 'krank'
+      || entry.special === 'schulung' || entry.special === 'bahnarzt' || entry.special === 'sfpa') {
+    return parseFloat(entry.manualHours) || 0;
+  }
+  if (entry.special === 'ausfall' && !entry.startWorked) return 8;
+  let total = 0;
+  if (entry.startH !== undefined && entry.endH !== undefined) {
+    total += shiftHours(entry.startH, entry.startM, entry.endH, entry.endM, entry.pause);
+  } else {
+    total += parseTimeRange(entry.time) ? (parseTimeRange(entry.time) - (parseFloat(entry.pause)||0)) : 0;
+  }
+  if (entry.doubleShift) {
+    if (entry.s2ausfall) total += 8;
+    else if (entry.s2startH !== undefined) total += shiftHours(entry.s2startH, entry.s2startM, entry.s2endH, entry.s2endM, entry.s2pause);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function blankEntry() {
+  return { site:'', bst:'', startH:'7', startM:'00', endH:'15', endM:'30', pause:'0.5', role:'sipo', special:'', manualHours:'', auslose:'', km:'', doubleShift:false, s2startH:'22', s2startM:'00', s2endH:'4', s2endM:'30', s2pause:'0.5', s2role:'sipo' };
+}
+
+function shiftHours(startH, startM, endH, endM, pause) {
+  const start = (+startH) + (+startM||0)/60;
+  let end = (+endH) + (+endM||0)/60;
+  if (end <= start) end += 24;
+  return Math.round(((end - start) - (parseFloat(pause)||0)) * 100) / 100;
+}
+
+function nightHours(startH, startM, endH, endM) {
+  const start = (+startH) + (+startM||0)/60;
+  let end = (+endH) + (+endM||0)/60;
+  if (end <= start) end += 24;
+  const overlapStart = Math.max(start, 22);
+  const overlapEnd = Math.min(end, 30); // 30 = 06:00 next day
+  return overlapEnd > overlapStart ? Math.round((overlapEnd - overlapStart) * 100) / 100 : 0;
+}
+
+function entryToTimeString(e) {
+  if (e.special && e.special !== 'sfpa') return '';
+  if (!e.startH && !e.endH) return e.time || '';
+  const sh = String(e.startH||'0').padStart(2,'0');
+  const sm = String(e.startM||'00').padStart(2,'0');
+  const eh = String(e.endH||'0').padStart(2,'0');
+  const em = String(e.endM||'00').padStart(2,'0');
+  let str = `${sh}.${sm} - ${eh}.${em}`;
+  if (e.doubleShift && !e.s2ausfall) {
+    const s2sh = String(e.s2startH||'0').padStart(2,'0');
+    const s2sm = String(e.s2startM||'00').padStart(2,'0');
+    const s2eh = String(e.s2endH||'0').padStart(2,'0');
+    const s2em = String(e.s2endM||'00').padStart(2,'0');
+    str += ` / ${s2sh}.${s2sm} - ${s2eh}.${s2em}`;
+  } else if (e.doubleShift && e.s2ausfall) {
+    str += ` / Ausfallschicht`;
+  }
+  return str;
+}
+
+function daysInMonth(monthIdx, year) {
+  return new Date(year, monthIdx+1, 0).getDate();
+}
+
+function App() {
+  const now = new Date();
+  const [state, setState] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Always auto-update month/year to current on load
+        return { ...parsed, month: now.getMonth(), year: now.getFullYear() };
+      }
+    } catch(e){}
+    return {
+      name: '',
+      pkw: '',
+      company: 'Bahndienste Lang',
+      month: now.getMonth(),
+      year: now.getFullYear(),
+      abrechnung: '',
+      entries: {},
+    };
+  });
+  const [editDay, setEditDay] = useState(null);
+  const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
+
+  const numDays = daysInMonth(state.month, state.year);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(''), 2200); };
+
+  const total = useMemo(() => {
+    let t = 0;
+    for (let d=1; d<=numDays; d++) {
+      const e = state.entries[d];
+      if (e) t += computeHours(e);
+    }
+    return Math.round(t*100)/100;
+  }, [state.entries, numDays]);
+
+  const ausGuthaben = parseFloat(state.ausGuthaben) || 0;
+  const zuGuthaben = parseFloat(state.zuGuthaben) || 0;
+  const abrechnung = Math.round((total + ausGuthaben - zuGuthaben) * 100) / 100;
+
+  function weekdayFor(day) {
+    return WEEKDAYS[new Date(state.year, state.month, day).getDay()];
+  }
+
+  function saveEntry(day, entry) {
+    setState(s => ({ ...s, entries: { ...s.entries, [day]: entry } }));
+  }
+  function clearEntry(day) {
+    setState(s => { const e = {...s.entries}; delete e[day]; return {...s, entries: e}; });
+  }
+
+  async function exportXlsx() {
+    showToast('Exportiere…');
+    try {
+      // Load embedded template (base64)
+      const b64 = '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';
+      const bin = atob(b64);
+      const buf = new Uint8Array(bin.length);
+      for (let i=0; i<bin.length; i++) buf[i] = bin.charCodeAt(i);
+      const buf_ = buf.buffer;
+
+      // Open as zip
+      const zip = await JSZip.loadAsync(buf_);
+      let xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
+
+      // ── XML cell patching helpers ──
+      function setStr(addr, val) {
+        if (!val && val !== 0) return;
+        // Escape XML special chars
+        const safe = String(val).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        xml = xml.replace(
+          new RegExp(`(<c r="${addr}"[^>]*?)( t="[^"]*")?(>)(<v>[^<]*<\\/v>|<is>.*?<\\/is>)?(<\\/c>)`, 's'),
+          (_, open, _t, _gt, _v, close) => {
+            const cleanOpen = open.replace(/ t="[^"]*"/, '');
+            return `${cleanOpen} t="inlineStr"><is><t>${safe}</t></is></c>`;
+          }
+        );
+      }
+      function setNum(addr, val) {
+        if (val === '' || val == null || isNaN(val)) return;
+        xml = xml.replace(
+          new RegExp(`(<c r="${addr}"[^>]*?>)(<v>[^<]*<\\/v>|<is>.*?<\\/is>)?(<\\/c>)`, 's'),
+          (_, open, _v, close) => `${open}<v>${val}</v>${close}`
+        );
+      }
+
+      // ── Month header & Name ──
+      setStr('E1', 'Stundenvorlage   Monat: ' + MONTHS[state.month]);
+      setStr('C1', state.name);
+
+      // ── Data rows ──
+      for (let d = 1; d <= numDays; d++) {
+        const r = d + 5;
+        const e = state.entries[d];
+        if (!e) continue;
+        if (e.site)   setStr(`B${r}`, e.site);
+        if (e.bst)    setNum(`C${r}`, Number(e.bst) || e.bst);
+        const ts = entryToTimeString(e);
+        if (ts)       setStr(`D${r}`, ts);
+        // Pause: write whenever there's a worked shift (not pure special)
+        const hasWork = !['urlaub','krank','schulung','bahnarzt','ausfall','sfpa'].includes(e.special);
+        const isPureSpecial = ['urlaub','krank','schulung','bahnarzt','ausfall','sfpa'].includes(e.special);
+        if (e.pause && !isPureSpecial) setNum(`E${r}`, parseFloat(e.pause));
+
+        const hrs = computeHours(e);
+        if (hrs) {
+          const s1hrs = shiftHours(e.startH||7, e.startM||0, e.endH||15, e.endM||30, e.pause);
+
+          // Pure standalone specials (no work)
+          if      (e.special === 'urlaub')   { setNum(`L${r}`, hrs); }
+          else if (e.special === 'krank')    { setNum(`M${r}`, hrs); }
+          else if (e.special === 'schulung' || e.special === 'bahnarzt' || e.special === 'sfpa') { setNum(`K${r}`, hrs); }
+          else if (e.special === 'ausfall') { setNum(`F${r}`, 8); }
+          else {
+            // ── Worked day: figure out role column + auto Feiertag ──
+            const dayHol  = isHoliday(state.year, state.month, d);
+            const nextHol = isHoliday(state.year, state.month, d+1);
+
+            // Shift 1
+            if (s1hrs > 0) {
+              const roleCol = (ROLES.find(x=>x.key===e.role)||{}).col || 'F';
+              setNum(`${roleCol}${r}`, s1hrs);
+              // Feiertag portion → P: ratio of holiday-overlap to total raw duration, applied to worked hrs
+              if (dayHol || nextHol) {
+                const rawDur = shiftHours(e.startH||7, e.startM||0, e.endH||15, e.endM||30, 0); // no pause
+                const rawOverlap = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
+                const fh1 = rawDur > 0 ? Math.round((s1hrs * rawOverlap / rawDur)*100)/100 : 0;
+                if (fh1 > 0) setNum(`P${r}`, fh1);
+              }
+            }
+
+            // Shift 2
+            if (e.doubleShift) {
+              if (e.s2ausfall) {
+                const base = (ROLES.find(x=>x.key===e.role)||{}).col === 'F' ? s1hrs : 0;
+                setNum(`F${r}`, Math.round((base + 8)*100)/100);
+              } else {
+                const s2hrs = shiftHours(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, e.s2pause);
+                if (s2hrs > 0) {
+                  const s2col = (ROLES.find(x=>x.key===e.s2role)||{}).col || 'F';
+                  const roleCol = (ROLES.find(x=>x.key===e.role)||{}).col || 'F';
+                  if (s2col === roleCol) setNum(`${s2col}${r}`, Math.round((s1hrs + s2hrs)*100)/100);
+                  else setNum(`${s2col}${r}`, s2hrs);
+                  // Feiertag portion of shift 2 → add to P
+                  if (dayHol || nextHol) {
+                    const s2RawDur = shiftHours(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, 0);
+                    const s2RawOverlap = feiertagOverlap(e.s2startH||22, e.s2startM||0, e.s2endH||4, e.s2endM||30, dayHol, nextHol);
+                    const fh2 = s2RawDur > 0 ? Math.round((s2hrs * s2RawOverlap / s2RawDur)*100)/100 : 0;
+                    if (fh2 > 0) {
+                      const rawDur1 = shiftHours(e.startH||7, e.startM||0, e.endH||15, e.endM||30, 0);
+                      const rawOvlp1 = feiertagOverlap(e.startH||7, e.startM||0, e.endH||15, e.endM||30, dayHol, nextHol);
+                      const fh1 = rawDur1 > 0 ? Math.round((s1hrs * rawOvlp1 / rawDur1)*100)/100 : 0;
+                      setNum(`P${r}`, Math.round((fh1 + fh2)*100)/100);
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (e.auslose) setNum(`Q${r}`, Number(e.auslose));
+
+        // ── SO: if day is Sunday, mirror worked hours into col O ──
+        const isSunday = new Date(state.year, state.month, d).getDay() === 0;
+        if (isSunday && hrs && !['urlaub','krank','schulung','bahnarzt'].includes(e.special)) setNum(`O${r}`, hrs);
+
+        // ── NA: night hours across both shifts ──
+        if (!e.special && e.startH !== undefined) {
+          let totalNight = nightHours(e.startH, e.startM, e.endH, e.endM);
+          if (e.doubleShift) totalNight += nightHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM);
+          if (totalNight > 0) setNum(`N${r}`, totalNight);
+        }
+      }
+
+      // ── Summary rows (fixed at 38-40) ──
+      if (ausGuthaben > 0) setNum('F39', ausGuthaben);
+      if (zuGuthaben > 0)  setNum('F38', zuGuthaben);
+      if (abrechnung)      setNum('F40', abrechnung);
+
+      // ── Signature row ──
+      const today = new Date().toLocaleDateString('de-DE');
+      setStr('B44', `Datum:  ${today}`);
+      setStr('D44', `Unterschrift MA.: ${state.name.split(' ').pop()}`);
+      if (state.pkw) setStr('L44', state.pkw.toUpperCase());
+
+      // ── Write back & download ──
+      zip.file('xl/worksheets/sheet1.xml', xml);
+      const out = await zip.generateAsync({type:'blob', mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const url = URL.createObjectURL(out);
+      const a = document.createElement('a');
+      a.href = url;
+      const safeName = (state.name || 'Unbekannt').trim().replace(/\s+/g,'_');
+      a.download = `Auslöse_${safeName}_${MONTHS[state.month]}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Excel exportiert ✓');
+    } catch(err) {
+      showToast('Fehler: ' + err.message);
+    }
+  }
+
+  return (
+    <div>
+      <div className="topbar">
+        <div className="brand">
+          <h1>Auslöse</h1>
+          <span className="tag">Stundenzettel</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.5.1</span>
+        </div>
+        <div className="monthrow">
+          <div className="field" style={{flex:2}}>
+            <label>Name</label>
+            <input value={state.name} onChange={e=>setState(s=>({...s, name:e.target.value}))} placeholder="Vor- und Nachname" autoComplete="off" autoCorrect="off" spellCheck="false" />
+          </div>
+          <div className="field" style={{flex:1}}>
+            <label>PKW-Kennzeichen</label>
+            <input value={state.pkw||''} onChange={e=>setState(s=>({...s, pkw:e.target.value}))} placeholder="z.B. HO-AB 123" autoComplete="off" autoCorrect="off" spellCheck="false" style={{textTransform:'uppercase'}} />
+          </div>
+        </div>
+        <div className="monthrow">
+          <div className="field">
+            <label>Monat</label>
+            <select value={state.month} onChange={e=>setState(s=>({...s, month:+e.target.value}))}>
+              {MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Jahr</label>
+            <input type="number" value={state.year} onChange={e=>setState(s=>({...s, year:+e.target.value}))} autoComplete="off" />
+          </div>
+        </div>
+      </div>
+
+      <div className="daygrid">
+        {Array.from({length:numDays}, (_,i)=>i+1).map(day => {
+          const e = state.entries[day];
+          const wd = weekdayFor(day);
+          const isWeekend = wd==='Sa' || wd==='So';
+          const isFeier = e && e.special==='sfpa';
+          const hrs = e ? computeHours(e) : 0;
+          let metaParts = [];
+          if (e) {
+            if (e.bst) metaParts.push('Bst ' + e.bst);
+            const ts = entryToTimeString(e);
+            if (ts) metaParts.push(ts);
+          }
+          return (
+            <div key={day}
+              className={'daycard ' + (e?'filled ':'') + (isWeekend?'weekend ':'') + (isFeier?'feier':'')}
+              onClick={()=>setEditDay(day)}>
+              <div className="daynum">{day}</div>
+              <div className="dayinfo">
+                <div className="wd">{wd}</div>
+                <div className={'site ' + (e&&e.site?'':'empty')}>{e&&e.site ? e.site : 'leer — tippen zum Eintragen'}</div>
+              {metaParts.length>0 && <div className="meta">{metaParts.join('  ·  ')}{e.auslose?<span>  ·  Auslöse {e.auslose}</span>:null}</div>}
+              </div>
+              {hrs>0 && <div className="hourspill">{hrs}h</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="totals">
+        <h2>Abrechnung</h2>
+        <div className="totrow"><span className="lbl">Gesamtstunden</span><span className="val big">{total}</span></div>
+        <div className="totrow">
+          <span className="lbl">Stunden aus Guthaben +</span>
+          <input type="number" inputMode="decimal" placeholder="0" value={state.ausGuthaben||''} onChange={e=>setState(s=>({...s, ausGuthaben:e.target.value}))} onFocus={e=>e.target.select()} autoComplete="off" />
+        </div>
+        <div className="totrow">
+          <span className="lbl">Stunden zu Guthaben −</span>
+          <input type="number" inputMode="decimal" placeholder="0" value={state.zuGuthaben||''} onChange={e=>setState(s=>({...s, zuGuthaben:e.target.value}))} onFocus={e=>e.target.select()} autoComplete="off" />
+        </div>
+        <div className="totrow">
+          <span className="lbl">Stunden zur Abrechnung</span>
+          <span className="val big" style={{color:'var(--gold)'}}>{abrechnung}</span>
+        </div>
+      </div>
+
+      <div className="actions">
+        <button className="btn btn-primary" onClick={exportXlsx}>↓ Excel exportieren</button>
+      </div>
+      <div className="actions">
+        <button className="btn btn-ghost" onClick={()=>{ if(confirm('Alle Einträge dieses Monats löschen?')){ setState(s=>({...s, entries:{}, ausGuthaben:'', zuGuthaben:''})); showToast('Geleert'); } }}>Monat leeren</button>
+      </div>
+
+      <div className="footer">LOKAL GESPEICHERT · KEIN SERVER · {state.name.toUpperCase()}</div>
+
+      {editDay && (
+        <DayEditor
+          day={editDay}
+          numDays={numDays}
+          year={state.year}
+          month={state.month}
+          weekday={weekdayFor(editDay)}
+          weekdayFor={weekdayFor}
+          entry={state.entries[editDay] || blankEntry()}
+          existing={!!state.entries[editDay]}
+          onClose={()=>setEditDay(null)}
+          onSave={(en, extraDays)=>{
+            setState(s => {
+              const entries = {...s.entries, [editDay]: en};
+              (extraDays||[]).forEach(d => { entries[d] = {...en}; });
+              return {...s, entries};
+            });
+            const total = 1 + (extraDays||[]).length;
+            setEditDay(null);
+            showToast(total > 1 ? `${total} Tage gespeichert` : `Tag ${editDay} gespeichert`);
+          }}
+          onClear={()=>{ clearEntry(editDay); setEditDay(null); showToast('Tag '+editDay+' geleert'); }}
+        />
+      )}
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, existing, onClose, onSave, onClear }) {
+  const [e, setE] = useState(entry);
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrProg, setOcrProg] = useState('');
+  const [extraDays, setExtraDays] = useState([]);
+  const fileRef = useRef();
+  const upd = (k,v) => setE(p=>({...p,[k]:v}));
+  const toggleDay = (d) => setExtraDays(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d]);
+
+  const isSpecial = !!e.special;
+  const liveHours = computeHours(e);
+
+  async function runOCR(file) {
+    setOcrBusy(true); setOcrProg('Lade OCR…');
+    try {
+      const { data } = await Tesseract.recognize(file, 'deu', {
+        logger: m => { if (m.status==='recognizing text') setOcrProg('Erkenne Text… '+Math.round(m.progress*100)+'%'); }
+      });
+      const text = data.text;
+      // heuristic extraction
+      const timeM = text.replace(/\s/g,'').match(/(\d{1,2}[.:]\d{2})-(\d{1,2}[.:]\d{2})/);
+      const bstM = text.match(/\b(\d{2,3})\b(?=[^\d]*$)/m);
+      // TP line
+      const tpM = text.match(/TP[:\s]+(?:Bf\.?\s*)?([A-Za-zÄÖÜäöüß\-\/ ]{3,40})/);
+      const next = {...e};
+      if (timeM) {
+        const [sh, sm] = timeM[1].replace(':','.').split('.');
+        const [eh, em] = timeM[2].replace(':','.').split('.');
+        next.startH = sh; next.startM = (sm||'00').padEnd(2,'0');
+        next.endH = eh;   next.endM   = (em||'00').padEnd(2,'0');
+      }
+      if (tpM) next.site = tpM[1].trim().replace(/\s*\/.*$/,'');
+      // pick first plausible Bst (2-3 digit number near "Bst" or standalone)
+      const bstLine = text.match(/(\d{2,3})\s*$/m);
+      if (bstLine) next.bst = bstLine[1];
+      setE(next);
+      setOcrProg('Fertig — bitte prüfen ✓');
+    } catch(err) {
+      setOcrProg('Fehler beim Lesen');
+    }
+    setOcrBusy(false);
+  }
+
+  return (
+    <>
+      <div className="scrim" onClick={onClose}></div>
+      <div className="sheet">
+        <div className="grab"></div>
+        <h3>Tag {day}</h3>
+        <div className="sub">{weekday} · {existing?'bearbeiten':'neuer Eintrag'}</div>
+
+        <div className={'ocrbox ' + (ocrBusy?'busy':'')} onClick={()=>!ocrBusy && fileRef.current.click()}>
+          {ocrBusy ? <>📷 {ocrProg}</> : <>📷 Dispo-Screenshot scannen (optional)<br/><span style={{fontSize:11}}>tippen zum Auswählen — füllt Felder vor</span></>}
+          <input ref={fileRef} type="file" accept="image/*" className="hide" onChange={ev=>{ if(ev.target.files[0]) runOCR(ev.target.files[0]); }} />
+          {ocrProg && !ocrBusy && <div className="ocrprog">{ocrProg}</div>}
+        </div>
+
+        <div className="chips">
+          <div className={'chip rust ' + (e.special==='sfpa'?'on':'')} onClick={()=>{
+            if (e.special==='sfpa') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'sfpa', site:'Feiertag', manualHours:'8'}); }
+          }}>Feiertag</div>
+          <div className={'chip ' + (e.special==='schulung'?'on':'')} onClick={()=>{
+            if (e.special==='schulung') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'schulung', site:'Schulung', manualHours:'8'}); }
+          }}>Schulung</div>
+          <div className={'chip ' + (e.special==='bahnarzt'?'on':'')} onClick={()=>{
+            if (e.special==='bahnarzt') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'bahnarzt', site:'Bahnarzt', manualHours:'8'}); }
+          }}>Bahnarzt</div>
+          <div className={'chip ' + (e.special==='urlaub'?'on':'')} onClick={()=>{
+            if (e.special==='urlaub') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'urlaub', site:'Urlaub', manualHours:'8'}); }
+          }}>Urlaub</div>
+          <div className={'chip ' + (e.special==='krank'?'on':'')} onClick={()=>{
+            if (e.special==='krank') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'krank', site:'Krank', manualHours:'8'}); }
+          }}>Krank</div>
+          <div className={'chip ' + (e.special==='ausfall'?'on':'')} onClick={()=>{
+            if (e.special==='ausfall') { setE(blankEntry()); }
+            else { setE({...blankEntry(), special:'ausfall', site:'Ausfallschicht', manualHours:'8'}); }
+          }}>Ausfallschicht</div>
+        </div>
+
+        {e.special ? (
+          <div style={{marginTop:14, padding:'12px 14px', background:'var(--panel)', borderRadius:12, border:'1px solid var(--line)'}}>
+            <div style={{fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--ink-faint)', marginBottom:4}}>Wird eingetragen:</div>
+            <div style={{fontWeight:600, fontSize:16}}>{e.site}</div>
+            <div style={{fontFamily:'DM Mono,monospace', fontSize:13, color:'var(--gold)', marginTop:4}}>
+              8h → {e.special==='urlaub'?'Urlaub (L)':e.special==='krank'?'Krank (M)':e.special==='ausfall'?'Sipo (F)':'S/F/P/A (K)'}
+            </div>
+          </div>
+        ) : (
+          <>
+            {(()=>{
+              // Only calculate if shift times are set
+              if (!e.startH || !e.endH) return null;
+              const start = (+e.startH) + (+e.startM||0)/60;
+              const end0  = (+e.endH)   + (+e.endM||0)/60;
+              const end   = end0 <= start ? end0 + 24 : end0;
+
+              const todayHol = isHoliday(year, month, day);
+              const nextHol  = isHoliday(year, month, day+1);
+
+              // Feiertag intersection
+              let feierStart = null, feierEnd = null;
+              if (todayHol) { feierStart = start; feierEnd = Math.min(end, 24); }
+              if (nextHol && end > 24) {
+                if (feierStart === null) { feierStart = 24; feierEnd = end; }
+                else feierEnd = end; // both days holiday
+              }
+
+              // Night shift intersection (22:00–06:00)
+              const nightStart = 22, nightEnd = 30;
+              const nStart = Math.max(start, nightStart);
+              const nEnd   = Math.min(end, nightEnd);
+              const hasNight = nEnd > nStart;
+
+              if (!feierStart && !hasNight) return null;
+
+              const fmt = (h) => {
+                const hh = Math.floor(h % 24); const mm = Math.round((h%1)*60);
+                return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+              };
+
+              return (
+                <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.12)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:11, color:'var(--gold)', display:'flex', flexDirection:'column', gap:4}}>
+                  {feierStart !== null && feierEnd > feierStart && (
+                    <span>🎉 Feiertagszuschlag: {fmt(feierStart)} – {fmt(feierEnd)} ({Math.round((feierEnd-feierStart)*100)/100}h) → Zuschläge F</span>
+                  )}
+                  {hasNight && (
+                    <span>🌙 Nachtzuschlag: {fmt(nStart)} – {fmt(nEnd)} ({Math.round((nEnd-nStart)*100)/100}h) → NA</span>
+                  )}
+                </div>
+              );
+            })()}
+            <div className="formgrid" style={{marginTop:12}}>
+              <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>
+              <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>
+            </div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Auslöse</label>
+              <div className="chips">
+                {[['','Keine'],['14','14 €'],['28','28 €']].map(([val,lbl])=>(
+                  <div key={val} className={'chip ' + (e.auslose===val?'on':'')} onClick={()=>upd('auslose',val)}>{lbl}</div>
+                ))}
+              </div>
+            </div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Startzeit</label>
+              <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                <select value={e.startH||'7'} onChange={ev=>upd('startH',ev.target.value)} style={{flex:1}}>
+                  {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                </select>
+                <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                <select value={e.startM||'00'} onChange={ev=>upd('startM',ev.target.value)} style={{flex:1}}>
+                  {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Endzeit</label>
+              <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                <select value={e.endH||'15'} onChange={ev=>upd('endH',ev.target.value)} style={{flex:1}}>
+                  {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                </select>
+                <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                <select value={e.endM||'30'} onChange={ev=>upd('endM',ev.target.value)} style={{flex:1}}>
+                  {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Pause</label>
+              <div className="chips">
+                {[['0.5','30 min'],['0.75','45 min'],['1','60 min']].map(([val,lbl])=>(
+                  <div key={val} className={'chip ' + (e.pause===val?'on':'')} onClick={()=>upd('pause',val)}>{lbl}</div>
+                ))}
+              </div>
+            </div>
+
+            <div className="roleinfo" style={{marginTop:11}}>Tätigkeit → Spalte für die Stunden:</div>
+            <div className="chips">
+              {ROLES.map(r => (
+                <div key={r.key} className={'chip ' + (e.role===r.key?'on':'')} onClick={()=>upd('role',r.key)}>{r.label}</div>
+              ))}
+            </div>
+            {shiftHours(e.startH,e.startM,e.endH,e.endM,e.pause)>0 && <div className="calcnote">→ {shiftHours(e.startH,e.startM,e.endH,e.endM,e.pause)} Std. in „{(ROLES.find(r=>r.key===e.role)||{}).label}"</div>}
+
+            {/* ── Doppelschicht ── */}
+            <div style={{marginTop:14, borderTop:'1px dashed var(--line)', paddingTop:12}}>
+              <div className={'chip ' + (e.doubleShift?'on':'')} style={{marginBottom: e.doubleShift?12:0}}
+                onClick={()=>upd('doubleShift', !e.doubleShift)}>
+                ⚡ Doppelschicht
+              </div>
+            </div>
+
+            {e.doubleShift && <>
+              <div className="chips" style={{marginTop:8}}>
+                <div className={'chip rust ' + (e.s2ausfall?'on':'')} onClick={()=>upd('s2ausfall', !e.s2ausfall)}>
+                  + Ausfallschicht (8h Sipo)
+                </div>
+              </div>
+              {!e.s2ausfall && <>
+              <div className="field" style={{marginTop:4}}>
+                <label>Schicht 2 — Startzeit</label>
+                <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                  <select value={e.s2startH||'22'} onChange={ev=>upd('s2startH',ev.target.value)} style={{flex:1}}>
+                    {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                  </select>
+                  <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                  <select value={e.s2startM||'00'} onChange={ev=>upd('s2startM',ev.target.value)} style={{flex:1}}>
+                    {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="field" style={{marginTop:11}}>
+                <label>Schicht 2 — Endzeit</label>
+                <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                  <select value={e.s2endH||'4'} onChange={ev=>upd('s2endH',ev.target.value)} style={{flex:1}}>
+                    {Array.from({length:24},(_,i)=><option key={i} value={i}>{String(i).padStart(2,'0')}</option>)}
+                  </select>
+                  <span style={{color:'var(--ink-faint)', fontFamily:'DM Mono,monospace'}}>:</span>
+                  <select value={e.s2endM||'30'} onChange={ev=>upd('s2endM',ev.target.value)} style={{flex:1}}>
+                    {['00','15','30','45'].map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="field" style={{marginTop:11}}>
+                <label>Schicht 2 — Pause</label>
+                <div className="chips">
+                  {[['0.5','30 min'],['0.75','45 min'],['1','60 min']].map(([val,lbl])=>(
+                    <div key={val} className={'chip ' + (e.s2pause===val?'on':'')} onClick={()=>upd('s2pause',val)}>{lbl}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="roleinfo" style={{marginTop:11}}>Schicht 2 — Tätigkeit:</div>
+              <div className="chips">
+                {ROLES.map(r => (
+                  <div key={r.key} className={'chip ' + (e.s2role===r.key?'on':'')} onClick={()=>upd('s2role',r.key)}>{r.label}</div>
+                ))}
+              </div>
+              {shiftHours(e.s2startH,e.s2startM,e.s2endH,e.s2endM,e.s2pause)>0 && <div className="calcnote">→ {shiftHours(e.s2startH,e.s2startM,e.s2endH,e.s2endM,e.s2pause)} Std. in „{(ROLES.find(r=>r.key===e.s2role)||{}).label}"</div>}
+              </>}
+              {e.s2ausfall && <div className="calcnote" style={{marginTop:6}}>+ 8h Ausfallschicht → Sipo</div>}
+            </>}
+          </>
+        )}
+
+        <div className="field" style={{marginTop:14}}>
+          <label>Auch eintragen für</label>
+          <div className="chips" style={{flexWrap:'wrap'}}>
+            {Array.from({length:numDays},(_,i)=>i+1).filter(d=>d!==day).map(d=>(
+              <div key={d} className={'chip ' + (extraDays.includes(d)?'on':'')} onClick={()=>toggleDay(d)}
+                style={{minWidth:40, textAlign:'center', padding:'6px 8px'}}>
+                <span style={{fontFamily:'DM Mono,monospace', fontSize:12}}>{d}</span>
+                <span style={{fontSize:10, color: extraDays.includes(d)?'inherit':'var(--ink-faint)', marginLeft:3}}>{weekdayFor(d)}</span>
+              </div>
+            ))}
+          </div>
+          {extraDays.length > 0 && <div className="calcnote">→ wird in {extraDays.length+1} Tagen eingetragen</div>}
+        </div>
+
+        <div className="actions">
+          <button className="btn btn-primary" onClick={()=>onSave(e, extraDays)}>{extraDays.length>0?`${extraDays.length+1} Tage speichern`:'Speichern'}</button>
+          {existing && <button className="btn btn-rust" onClick={onClear}>Löschen</button>}
+        </div>
+        <div className="actions">
+          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>

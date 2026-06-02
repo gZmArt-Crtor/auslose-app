@@ -560,6 +560,7 @@ function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose
             </div>
           </div>
         ) : (
+          <>
             <div className="formgrid" style={{marginTop:12}}>
               <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>
               <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>

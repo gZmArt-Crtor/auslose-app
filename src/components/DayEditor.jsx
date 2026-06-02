@@ -89,9 +89,9 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
           }}>Ausfallschicht</div>
         </div>
         <div className="roleinfo" style={{ marginTop: 6 }}>
-          „Feiertag" = freier gesetzlicher Feiertag (8h Spalte K), <b>ohne</b> Arbeitszeit. Am Feiertag <b>gearbeitet</b>? Chip nicht wählen — normale Schicht eintragen (Zuschlag Spalte P automatisch).
+          Feiertagknopf = gesetzlicher Feiertag <b>ohne</b> Arbeitszeit, normale 8h in S/F/P/A Spalte. Wenn gearbeitet wurde normale Arbeitszeit eintragen, Feiertag sollte automatisch erkannt werden.
           <br />
-          „Ausfallschicht" = ganzer Tag (8h Sipo). Ausfall <b>und</b> echte Schicht? Schicht normal eintragen, dann ⚡ Doppelschicht + „+ Ausfallschicht".
+          Ausfallschicht + Ersatzschicht = Zeiten eintragen, ganz unten auf Doppelschicht und + Ausfallschichtknopf drücken.
         </div>
 
         {e.special ? (

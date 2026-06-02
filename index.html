@@ -700,11 +700,36 @@ function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, exis
           </div>
         ) : (
           <>
-            {(isHoliday(year, month, day) || isHoliday(year, month, day+1)) && (
-              <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.15)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--gold)'}}>
-                🎉 {isHoliday(year,month,day) ? 'Feiertag heute' : 'Feiertag morgen'} erkannt — Feiertagsstunden werden automatisch in Zuschläge F berechnet
-              </div>
-            )}
+            {(()=>{
+              const todayHol = isHoliday(year, month, day);
+              const nextHol  = isHoliday(year, month, day+1);
+              const hasShift = e.startH !== undefined;
+              if (!todayHol && !nextHol) return null;
+              if (!todayHol && nextHol) {
+                // Only show if shift actually crosses midnight
+                if (!hasShift) return null;
+                const start = (+e.startH) + (+e.startM||0)/60;
+                const end0  = (+e.endH)   + (+e.endM||0)/60;
+                const end   = end0 <= start ? end0 + 24 : end0;
+                if (end <= 24) return null; // doesn't cross midnight
+                const overlapH = end - 24;
+                const overlapRounded = Math.round(overlapH*100)/100;
+                const fromTime = '00:00';
+                const toH = Math.floor(end-24); const toM = Math.round(((end-24)%1)*60);
+                const toTime = `${String(toH).padStart(2,'0')}:${String(toM).padStart(2,'0')}`;
+                return (
+                  <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.12)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--gold)'}}>
+                    🌙 Nachtschicht endet in Feiertag — {overlapRounded}h Feiertagszuschlag ({fromTime}–{toTime}) → Zuschläge F
+                  </div>
+                );
+              }
+              // Today is holiday
+              return (
+                <div style={{marginTop:12, padding:'9px 12px', background:'rgba(224,164,67,0.15)', borderRadius:10, border:'1px solid var(--gold-soft)', fontFamily:'DM Mono,monospace', fontSize:12, color:'var(--gold)'}}>
+                  🎉 Feiertag heute — Arbeitszeit wird automatisch in Zuschläge F berechnet
+                </div>
+              );
+            })()}
             <div className="formgrid" style={{marginTop:12}}>
               <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>
               <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" onFocus={ev=>ev.target.select()} autoComplete="off" autoCorrect="off" spellCheck="false" /></div>

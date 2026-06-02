@@ -364,7 +364,7 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.1</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.2</span>
         </div>
         <div className="monthrow">
           <div className="field" style={{flex:2}}>
@@ -567,11 +567,6 @@ function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) 
                   <div key={val} className={'chip ' + (e.pause===val?'on':'')} onClick={()=>upd('pause',val)}>{lbl}</div>
                 ))}
               </div>
-            </div>
-
-            <div className="full field" style={{marginTop:11}}>
-              <label>km (optional)</label>
-              <input inputMode="numeric" value={e.km} onChange={ev=>upd('km',ev.target.value)} placeholder="" onFocus={ev=>ev.target.select()} />
             </div>
 
             <div className="roleinfo" style={{marginTop:11}}>Tätigkeit → Spalte für die Stunden:</div>

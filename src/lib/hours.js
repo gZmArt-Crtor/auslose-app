@@ -26,9 +26,34 @@ export function nightHours(startH, startM, endH, endM) {
   return overlapEnd > overlapStart ? Math.round((overlapEnd - overlapStart) * 100) / 100 : 0;
 }
 
+export const PURE_SPECIALS = ['urlaub', 'krank', 'schulung', 'bahnarzt', 'sfpa'];
+
+export function isPureSpecial(entry) {
+  return entry?.special && (PURE_SPECIALS.includes(entry.special) || entry.special === 'ausfall');
+}
+
+// Strip shift/double-shift fields so saved data matches a chip-only day (no phantom times).
+export function specialEntry(special, site) {
+  return { special, site, bst: '', auslose: '', manualHours: '8' };
+}
+
+export function normalizeEntry(e) {
+  if (!e?.special) return e;
+  const base = {
+    special: e.special,
+    site: e.site || '',
+    bst: e.bst || '',
+    auslose: e.auslose || '',
+    manualHours: e.manualHours || '8',
+  };
+  if (e.special === 'ausfall') {
+    return { ...base, site: e.site || 'Ausfallschicht', manualHours: '8' };
+  }
+  return base;
+}
+
 export function computeHours(entry) {
-  if (entry.special === 'urlaub' || entry.special === 'krank'
-      || entry.special === 'schulung' || entry.special === 'bahnarzt' || entry.special === 'sfpa') {
+  if (PURE_SPECIALS.includes(entry.special)) {
     return parseFloat(entry.manualHours) || 0;
   }
   if (entry.special === 'ausfall') return 8;
@@ -56,7 +81,7 @@ export function blankEntry() {
 }
 
 export function entryToTimeString(e) {
-  if (e.special && e.special !== 'sfpa') return '';
+  if (isPureSpecial(e)) return '';
   if (!e.startH && !e.endH) return e.time || '';
   const sh = String(e.startH || '0').padStart(2, '0');
   const sm = String(e.startM || '00').padStart(2, '0');

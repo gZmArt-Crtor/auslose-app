@@ -3,7 +3,7 @@ import { MONTHS } from '../config/constants.js';
 import { COLUMNS as C, SIPO_COL, roleCol, ROW_OFFSET } from '../config/excelColumns.js';
 import { isHoliday, feiertagOverlap } from './holidays.js';
 import {
-  computeHours, shiftHours, nightHours, entryToTimeString, siteWithAusfall,
+  computeHours, shiftHours, nightHours, entryToTimeString, siteWithAusfall, isPureSpecial,
 } from './hours.js';
 
 // Pure transform: takes the sheet1.xml string + one month of data, returns patched XML.
@@ -49,8 +49,8 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
     if (e.bst) setNum(`${C.bst}${r}`, Number(e.bst) || e.bst);
     const ts = entryToTimeString(e);
     if (ts) setStr(`${C.time}${r}`, ts);
-    const isPureSpecial = ['urlaub', 'krank', 'schulung', 'bahnarzt', 'ausfall', 'sfpa'].includes(e.special);
-    if (e.pause && !isPureSpecial) setNum(`${C.pause}${r}`, parseFloat(e.pause));
+    const pureSpecial = isPureSpecial(e);
+    if (e.pause && !pureSpecial) setNum(`${C.pause}${r}`, parseFloat(e.pause));
 
     const hrs = computeHours(e);
     if (hrs) {
@@ -103,7 +103,7 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
     if (e.auslose) setNum(`${C.auslose}${r}`, Number(e.auslose));
 
     const isSunday = new Date(year, month, d).getDay() === 0;
-    if (isSunday && hrs && !['urlaub', 'krank', 'schulung', 'bahnarzt'].includes(e.special)) setNum(`${C.sunday}${r}`, hrs);
+    if (isSunday && hrs && !pureSpecial) setNum(`${C.sunday}${r}`, hrs);
 
     if (!e.special && e.startH !== undefined) {
       let totalNight = nightHours(e.startH, e.startM, e.endH, e.endM);

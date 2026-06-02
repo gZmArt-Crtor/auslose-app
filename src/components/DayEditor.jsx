@@ -2,10 +2,10 @@ import React, { useState, useRef } from 'react';
 import Tesseract from 'tesseract.js';
 import { ROLES } from '../config/constants.js';
 import { isHoliday } from '../lib/holidays.js';
-import { shiftHours, blankEntry } from '../lib/hours.js';
+import { shiftHours, blankEntry, specialEntry, normalizeEntry, isPureSpecial } from '../lib/hours.js';
 
 export default function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, existing, onClose, onSave, onClear }) {
-  const [e, setE] = useState(entry);
+  const [e, setE] = useState(() => (isPureSpecial(entry) ? normalizeEntry(entry) : entry));
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProg, setOcrProg] = useState('');
   const [extraDays, setExtraDays] = useState([]);
@@ -65,31 +65,33 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
         <div className="chips">
           <div className={'chip rust ' + (e.special === 'sfpa' ? 'on' : '')} onClick={() => {
             if (e.special === 'sfpa') setE(blankEntry());
-            else setE({ ...blankEntry(), special: 'sfpa', site: 'Feiertag', manualHours: '8' });
+            else setE(specialEntry('sfpa', 'Feiertag'));
           }}>Feiertag</div>
           <div className={'chip ' + (e.special === 'schulung' ? 'on' : '')} onClick={() => {
             if (e.special === 'schulung') setE(blankEntry());
-            else setE({ ...blankEntry(), special: 'schulung', site: 'Schulung', manualHours: '8' });
+            else setE(specialEntry('schulung', 'Schulung'));
           }}>Schulung</div>
           <div className={'chip ' + (e.special === 'bahnarzt' ? 'on' : '')} onClick={() => {
             if (e.special === 'bahnarzt') setE(blankEntry());
-            else setE({ ...blankEntry(), special: 'bahnarzt', site: 'Bahnarzt', manualHours: '8' });
+            else setE(specialEntry('bahnarzt', 'Bahnarzt'));
           }}>Bahnarzt</div>
           <div className={'chip ' + (e.special === 'urlaub' ? 'on' : '')} onClick={() => {
             if (e.special === 'urlaub') setE(blankEntry());
-            else setE({ ...blankEntry(), special: 'urlaub', site: 'Urlaub', manualHours: '8' });
+            else setE(specialEntry('urlaub', 'Urlaub'));
           }}>Urlaub</div>
           <div className={'chip ' + (e.special === 'krank' ? 'on' : '')} onClick={() => {
             if (e.special === 'krank') setE(blankEntry());
-            else setE({ ...blankEntry(), special: 'krank', site: 'Krank', manualHours: '8' });
+            else setE(specialEntry('krank', 'Krank'));
           }}>Krank</div>
           <div className={'chip ' + (e.special === 'ausfall' ? 'on' : '')} onClick={() => {
             if (e.special === 'ausfall') setE(blankEntry());
-            else setE({ ...blankEntry(), special: 'ausfall', site: 'Ausfallschicht', manualHours: '8' });
+            else setE(specialEntry('ausfall', 'Ausfallschicht'));
           }}>Ausfallschicht</div>
         </div>
         <div className="roleinfo" style={{ marginTop: 6 }}>
-          „Ausfallschicht" = ganzer Tag (8h Sipo). Hattest du Ausfall <b>und</b> eine echte Schicht? Schicht normal eintragen, dann ⚡ Doppelschicht + „+ Ausfallschicht".
+          „Feiertag" = freier gesetzlicher Feiertag (8h Spalte K), <b>ohne</b> Arbeitszeit. Am Feiertag <b>gearbeitet</b>? Chip nicht wählen — normale Schicht eintragen (Zuschlag Spalte P automatisch).
+          <br />
+          „Ausfallschicht" = ganzer Tag (8h Sipo). Ausfall <b>und</b> echte Schicht? Schicht normal eintragen, dann ⚡ Doppelschicht + „+ Ausfallschicht".
         </div>
 
         {e.special ? (
@@ -272,7 +274,7 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
         </div>
 
         <div className="actions">
-          <button className="btn btn-primary" onClick={() => onSave(e, extraDays)}>{extraDays.length > 0 ? `${extraDays.length + 1} Tage speichern` : 'Speichern'}</button>
+          <button className="btn btn-primary" onClick={() => onSave(normalizeEntry(e), extraDays)}>{extraDays.length > 0 ? `${extraDays.length + 1} Tage speichern` : 'Speichern'}</button>
           {existing && <button className="btn btn-rust" onClick={onClear}>Löschen</button>}
         </div>
         <div className="actions">

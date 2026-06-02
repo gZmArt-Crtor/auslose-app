@@ -364,7 +364,7 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.2</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.3</span>
         </div>
         <div className="monthrow">
           <div className="field" style={{flex:2}}>
@@ -442,11 +442,22 @@ function App() {
       {editDay && (
         <DayEditor
           day={editDay}
+          numDays={numDays}
           weekday={weekdayFor(editDay)}
+          weekdayFor={weekdayFor}
           entry={state.entries[editDay] || blankEntry()}
           existing={!!state.entries[editDay]}
           onClose={()=>setEditDay(null)}
-          onSave={(en)=>{ saveEntry(editDay, en); setEditDay(null); showToast('Tag '+editDay+' gespeichert'); }}
+          onSave={(en, extraDays)=>{
+            setState(s => {
+              const entries = {...s.entries, [editDay]: en};
+              (extraDays||[]).forEach(d => { entries[d] = {...en}; });
+              return {...s, entries};
+            });
+            const total = 1 + (extraDays||[]).length;
+            setEditDay(null);
+            showToast(total > 1 ? `${total} Tage gespeichert` : `Tag ${editDay} gespeichert`);
+          }}
           onClear={()=>{ clearEntry(editDay); setEditDay(null); showToast('Tag '+editDay+' geleert'); }}
         />
       )}
@@ -455,12 +466,14 @@ function App() {
   );
 }
 
-function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) {
+function DayEditor({ day, numDays, weekday, weekdayFor, entry, existing, onClose, onSave, onClear }) {
   const [e, setE] = useState(entry);
   const [ocrBusy, setOcrBusy] = useState(false);
   const [ocrProg, setOcrProg] = useState('');
+  const [extraDays, setExtraDays] = useState([]);
   const fileRef = useRef();
   const upd = (k,v) => setE(p=>({...p,[k]:v}));
+  const toggleDay = (d) => setExtraDays(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d]);
 
   const isSpecial = !!e.special;
   const liveHours = computeHours(e);
@@ -531,7 +544,15 @@ function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) 
             <div className="formgrid" style={{marginTop:12}}>
               <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" onFocus={ev=>ev.target.select()} /></div>
               <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" onFocus={ev=>ev.target.select()} /></div>
-              <div className="field"><label>Auslöse</label><input inputMode="numeric" value={e.auslose} onChange={ev=>upd('auslose',ev.target.value)} placeholder="14" onFocus={ev=>ev.target.select()} /></div>
+            </div>
+
+            <div className="field" style={{marginTop:11}}>
+              <label>Auslöse</label>
+              <div className="chips">
+                {[['','Keine'],['14','14 €'],['28','28 €']].map(([val,lbl])=>(
+                  <div key={val} className={'chip ' + (e.auslose===val?'on':'')} onClick={()=>upd('auslose',val)}>{lbl}</div>
+                ))}
+              </div>
             </div>
 
             <div className="field" style={{marginTop:11}}>
@@ -579,8 +600,22 @@ function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) 
           </>
         )}
 
+        <div className="field" style={{marginTop:14}}>
+          <label>Auch eintragen für</label>
+          <div className="chips" style={{flexWrap:'wrap'}}>
+            {Array.from({length:numDays},(_,i)=>i+1).filter(d=>d!==day).map(d=>(
+              <div key={d} className={'chip ' + (extraDays.includes(d)?'on':'')} onClick={()=>toggleDay(d)}
+                style={{minWidth:40, textAlign:'center', padding:'6px 8px'}}>
+                <span style={{fontFamily:'DM Mono,monospace', fontSize:12}}>{d}</span>
+                <span style={{fontSize:10, color: extraDays.includes(d)?'inherit':'var(--ink-faint)', marginLeft:3}}>{weekdayFor(d)}</span>
+              </div>
+            ))}
+          </div>
+          {extraDays.length > 0 && <div className="calcnote">→ wird in {extraDays.length+1} Tagen eingetragen</div>}
+        </div>
+
         <div className="actions">
-          <button className="btn btn-primary" onClick={()=>onSave(e)}>Speichern</button>
+          <button className="btn btn-primary" onClick={()=>onSave(e, extraDays)}>{extraDays.length>0?`${extraDays.length+1} Tage speichern`:'Speichern'}</button>
           {existing && <button className="btn btn-rust" onClick={onClear}>Löschen</button>}
         </div>
         <div className="actions">

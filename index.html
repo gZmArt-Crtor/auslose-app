@@ -357,7 +357,8 @@ function App() {
       const url = URL.createObjectURL(out);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Auslöse_Art_${MONTHS[state.month]}.xlsx`;
+      const safeName = (state.name || 'Unbekannt').trim().replace(/\s+/g,'_');
+      a.download = `Auslöse_${safeName}_${MONTHS[state.month]}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
       showToast('Excel exportiert ✓');

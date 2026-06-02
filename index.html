@@ -185,14 +185,11 @@ function parseTimeRange(str) {
 }
 
 function computeHours(entry) {
-  if (entry.special && entry.special !== 'sfpa_only') {
-    return entry.specialHours || 0;
-  }
-  if (entry.role === 'sfpa' || entry.role === 'urlaub' || entry.role === 'krank') {
-    return entry.manualHours || 0;
+  if (entry.special === 'sfpa' || entry.special === 'urlaub' || entry.special === 'krank') {
+    return parseFloat(entry.manualHours) || 0;
   }
   const dur = parseTimeRange(entry.time);
-  if (dur == null) return entry.manualHours || 0;
+  if (dur == null) return parseFloat(entry.manualHours) || 0;
   const pause = parseFloat(entry.pause) || 0;
   return Math.round((dur - pause) * 100) / 100;
 }
@@ -276,7 +273,9 @@ function App() {
         const hrs = computeHours(e);
         const colMap = { F:5,G:6,H:7,I:8,J:9,K:10,L:11,M:12 };
         let col = 'F';
-        if (e.special && SPECIAL.find(x=>x.key===e.special)) col = SPECIAL.find(x=>x.key===e.special).col;
+        if (e.special === 'sfpa')        col = 'K';
+        else if (e.special === 'urlaub') col = 'L';
+        else if (e.special === 'krank')  col = 'M';
         else { const r = ROLES.find(x=>x.key===e.role); if (r) col = r.col; }
         if (hrs) row[colMap[col]] = hrs;
         row[16] = e.auslose || '';
@@ -443,22 +442,22 @@ function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) 
         {e.special === 'sfpa' ? (
           <div className="formgrid" style={{marginTop:12}}>
             <div className="full field"><label>Bezeichnung</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="Feiertag" /></div>
-            <div className="field"><label>Stunden (S/F/P/A)</label><input type="number" inputMode="decimal" value={e.manualHours||'8'} onChange={ev=>upd('manualHours',ev.target.value)} /></div>
+            <div className="field"><label>Stunden (S/F/P/A)</label><input type="number" inputMode="decimal" placeholder="8" value={e.manualHours||''} onChange={ev=>upd('manualHours',ev.target.value)} onFocus={ev=>ev.target.select()} /></div>
           </div>
         ) : (e.special === 'urlaub' || e.special === 'krank') ? (
           <div className="formgrid" style={{marginTop:12}}>
             <div className="full field"><label>Bezeichnung</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder={e.special==='urlaub'?'Urlaub':'Krank'} /></div>
-            <div className="field"><label>Stunden</label><input type="number" inputMode="decimal" value={e.manualHours||'8'} onChange={ev=>upd('manualHours',ev.target.value)} /></div>
+            <div className="field"><label>Stunden</label><input type="number" inputMode="decimal" placeholder="8" value={e.manualHours||''} onChange={ev=>upd('manualHours',ev.target.value)} onFocus={ev=>ev.target.select()} /></div>
           </div>
         ) : (
           <>
             <div className="formgrid" style={{marginTop:12}}>
-              <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" /></div>
-              <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" /></div>
-              <div className="field"><label>Auslöse</label><input inputMode="numeric" value={e.auslose} onChange={ev=>upd('auslose',ev.target.value)} placeholder="14" /></div>
-              <div className="field"><label>Arbeitszeit (von-bis)</label><input value={e.time} onChange={ev=>upd('time',ev.target.value)} placeholder="7.00 - 15.30" /></div>
-              <div className="field"><label>Pause (h)</label><input inputMode="decimal" value={e.pause} onChange={ev=>upd('pause',ev.target.value)} placeholder="0.5" /></div>
-              <div className="full field"><label>km (optional)</label><input inputMode="numeric" value={e.km} onChange={ev=>upd('km',ev.target.value)} placeholder="" /></div>
+              <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" onFocus={ev=>ev.target.select()} /></div>
+              <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" onFocus={ev=>ev.target.select()} /></div>
+              <div className="field"><label>Auslöse</label><input inputMode="numeric" value={e.auslose} onChange={ev=>upd('auslose',ev.target.value)} placeholder="14" onFocus={ev=>ev.target.select()} /></div>
+              <div className="field"><label>Arbeitszeit (von-bis)</label><input value={e.time} onChange={ev=>upd('time',ev.target.value)} placeholder="7.00 - 15.30" onFocus={ev=>ev.target.select()} /></div>
+              <div className="field"><label>Pause (h)</label><input inputMode="decimal" value={e.pause} onChange={ev=>upd('pause',ev.target.value)} placeholder="0.5" onFocus={ev=>ev.target.select()} /></div>
+              <div className="full field"><label>km (optional)</label><input inputMode="numeric" value={e.km} onChange={ev=>upd('km',ev.target.value)} placeholder="" onFocus={ev=>ev.target.select()} /></div>
             </div>
             <div className="roleinfo">Tätigkeit → Spalte für die Stunden:</div>
             <div className="chips">

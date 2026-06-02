@@ -2,9 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { WEEKDAYS, MONTHS } from './config/constants.js';
 import { computeHours, blankEntry, entryToTimeString, daysInMonth, siteWithAusfall } from './lib/hours.js';
 import { isHoliday } from './lib/holidays.js';
-import {
-  buildExportBlob, exportFilename, saveExportBlob, shareCsvExport, canShareCsvFiles,
-} from './lib/export.js';
+import { exportXlsx } from './lib/export.js';
 import {
   loadState, saveState, monthKey, blankMonth,
   serializeBackup, backupFilename, parseBackup,
@@ -12,14 +10,12 @@ import {
 import { APP_VERSION } from './version.js';
 import DayEditor from './components/DayEditor.jsx';
 import ConfirmDialog from './components/ConfirmDialog.jsx';
-import ExportReadyDialog from './components/ExportReadyDialog.jsx';
 
 export default function App() {
   const [state, setState] = useState(loadState);
   const [editDay, setEditDay] = useState(null);
   const [toast, setToast] = useState('');
   const [dialog, setDialog] = useState(null);
-  const [exportReady, setExportReady] = useState(null);
   const importRef = useRef();
 
   useEffect(() => { saveState(state); }, [state]);
@@ -28,10 +24,10 @@ export default function App() {
   const closeDialog = useCallback(() => setDialog(null), []);
 
   useEffect(() => {
-    const open = editDay != null || dialog != null || exportReady != null;
+    const open = editDay != null || dialog != null;
     document.body.classList.toggle('modal-open', open);
     return () => document.body.classList.remove('modal-open');
-  }, [editDay, dialog, exportReady]);
+  }, [editDay, dialog]);
 
   const numDays = daysInMonth(state.month, state.year);
   const key = monthKey(state.year, state.month);
@@ -123,40 +119,16 @@ export default function App() {
     showToast('Daten wiederhergestellt ✓');
   }
 
-  const exportParams = useMemo(() => ({
-    name: state.name, pkw: state.pkw, month: state.month, year: state.year,
-    numDays, entries, ausGuthaben: bucket.ausGuthaben, zuGuthaben: bucket.zuGuthaben,
-  }), [state.name, state.pkw, state.month, state.year, numDays, entries, bucket.ausGuthaben, bucket.zuGuthaben]);
-
   async function runExport() {
     showToast('Exportiere…');
     try {
-      const blob = await buildExportBlob(exportParams);
-      const filename = exportFilename(exportParams);
-      setExportReady({ blob, filename, canShareCsv: canShareCsvFiles() });
-      showToast('Export bereit');
+      await exportXlsx({
+        name: state.name, pkw: state.pkw, month: state.month, year: state.year,
+        numDays, entries, ausGuthaben: bucket.ausGuthaben, zuGuthaben: bucket.zuGuthaben,
+      });
+      showToast('Excel exportiert ✓');
     } catch (err) {
       showToast('Fehler: ' + err.message);
-    }
-  }
-
-  async function onExportSaveExcel() {
-    if (!exportReady) return;
-    const { blob, filename } = exportReady;
-    const result = await saveExportBlob(blob, filename);
-    if (result === 'cancelled') return;
-    setExportReady(null);
-    showToast(result === 'saved' ? 'Excel gespeichert ✓' : 'Excel heruntergeladen ✓');
-  }
-
-  async function onExportShareCsv() {
-    try {
-      await shareCsvExport(exportParams);
-      setExportReady(null);
-      showToast('CSV geteilt ✓');
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      showToast('Teilen fehlgeschlagen: ' + (err.message || 'unbekannt'));
     }
   }
 
@@ -249,7 +221,7 @@ export default function App() {
       </div>
 
       <div className="actions">
-        <button className="btn btn-primary" onClick={onExportClick}>↓ Excel exportieren / teilen</button>
+        <button className="btn btn-primary" onClick={onExportClick}>↓ Excel exportieren</button>
       </div>
       <div className="actions">
         <button className="btn btn-ghost" onClick={downloadBackup}>Daten sichern</button>
@@ -260,7 +232,7 @@ export default function App() {
         <button className="btn btn-ghost" onClick={() => setDialog({ type: 'clear' })}>Monat leeren</button>
       </div>
 
-      <div className="footer">RenPG</div>
+      <div className="footer">LOKAL GESPEICHERT · KEIN SERVER · {String(state.name || '').toUpperCase()}</div>
 
       {editDay && (
         <DayEditor
@@ -305,16 +277,6 @@ export default function App() {
           message="Es ist kein Name eingetragen. Möchtest du den Stundenzettel trotzdem exportieren?"
           confirmLabel="Trotzdem exportieren"
           onConfirm={() => { setDialog(null); runExport(); }} onCancel={closeDialog}
-        />
-      )}
-
-      {exportReady && (
-        <ExportReadyDialog
-          filename={exportReady.filename}
-          canShareCsv={exportReady.canShareCsv}
-          onShareCsv={onExportShareCsv}
-          onSaveExcel={onExportSaveExcel}
-          onCancel={() => setExportReady(null)}
         />
       )}
 

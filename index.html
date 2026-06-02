@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#1a1410" />
+<title>Auslöse Stundenzettel</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1410;
+    --bg2: #221a13;
+    --panel: #2b2018;
+    --panel-hi: #34271d;
+    --line: #3d2f23;
+    --ink: #f2e8db;
+    --ink-dim: #b9a892;
+    --ink-faint: #8a7560;
+    --gold: #e0a443;
+    --gold-soft: #c89236;
+    --rust: #c1592e;
+    --green: #6f9e54;
+    --red: #d4624a;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(224,164,67,0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(193,89,46,0.07), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    min-height: 100vh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  #root { max-width: 720px; margin: 0 auto; padding: 0 14px 120px; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    padding: calc(env(safe-area-inset-top) + 16px) 4px 14px;
+    background: linear-gradient(180deg, var(--bg) 60%, rgba(26,20,16,0.85) 85%, transparent);
+    backdrop-filter: blur(4px);
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .brand h1 {
+    font-family: 'Fraunces', serif; font-weight: 900; font-size: 30px;
+    margin: 0; letter-spacing: -0.5px; line-height: 1;
+    background: linear-gradient(180deg, #f6e7c8, var(--gold)); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .brand .tag { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 2px; }
+  .monthrow { display: flex; gap: 8px; margin-top: 12px; }
+  .field { flex: 1; }
+  .field label { display: block; font-family:'DM Mono',monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 5px 2px; }
+  input, select, textarea {
+    width: 100%; font-family: 'DM Sans', sans-serif; font-size: 16px;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 10px; padding: 11px 12px; outline: none; transition: border-color .15s, background .15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--gold-soft); background: var(--panel-hi); }
+  select { appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%23b9a892' stroke-width='1.5' fill='none'/></svg>"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+  .daygrid { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+  .daycard {
+    background: linear-gradient(180deg, var(--panel), var(--bg2));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 11px 12px; display: flex; align-items: center; gap: 12px;
+    cursor: pointer; transition: transform .12s, border-color .15s, box-shadow .15s; position: relative; overflow: hidden;
+  }
+  .daycard:active { transform: scale(0.985); }
+  .daycard.filled { border-color: #4a3826; }
+  .daycard.weekend { background: linear-gradient(180deg, #241a13, #1d1610); }
+  .daycard.feier { border-color: var(--gold-soft); }
+  .daynum {
+    flex: 0 0 42px; height: 42px; border-radius: 11px; display: grid; place-items: center;
+    font-family: 'Fraunces', serif; font-weight: 600; font-size: 19px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--ink-dim);
+  }
+  .daycard.filled .daynum { background: linear-gradient(160deg, var(--gold), var(--gold-soft)); color: #2a1c0c; border-color: transparent; }
+  .daycard.feier .daynum { background: linear-gradient(160deg, var(--rust), #9c3f1e); color: #fff; }
+  .dayinfo { flex: 1; min-width: 0; }
+  .dayinfo .wd { font-family:'DM Mono',monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-faint); }
+  .dayinfo .site { font-weight: 600; font-size: 16px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dayinfo .site.empty { color: var(--ink-faint); font-weight: 400; font-style: italic; }
+  .dayinfo .meta { font-family:'DM Mono',monospace; font-size: 11.5px; color: var(--gold); margin-top: 2px; }
+  .dayinfo .meta span { color: var(--ink-faint); }
+  .hourspill { flex: 0 0 auto; font-family:'DM Mono',monospace; font-weight: 500; font-size: 13px; color: var(--ink-dim); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+
+  .totals { margin-top: 18px; background: linear-gradient(180deg, var(--panel-hi), var(--bg2)); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .totals h2 { font-family:'DM Mono',monospace; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 12px; }
+  .totrow { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px dashed var(--line); }
+  .totrow:last-child { border-bottom: 0; }
+  .totrow .lbl { color: var(--ink-dim); font-size: 14px; }
+  .totrow .val { font-family:'DM Mono',monospace; font-size: 17px; font-weight: 500; }
+  .totrow .val.big { color: var(--gold); font-size: 20px; }
+  .totrow input { width: 90px; text-align: right; font-family:'DM Mono',monospace; padding: 7px 9px; font-size: 16px; }
+
+  .actions { display: flex; gap: 9px; margin-top: 16px; }
+  .btn {
+    flex: 1; border: none; border-radius: 12px; padding: 15px 12px; font-family: 'DM Sans', sans-serif;
+    font-weight: 700; font-size: 15px; cursor: pointer; transition: transform .12s, filter .15s; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: linear-gradient(160deg, var(--gold), var(--gold-soft)); color: #2a1c0c; }
+  .btn-ghost { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  .btn-rust { background: linear-gradient(160deg, var(--rust), #9c3f1e); color: #fff; }
+
+  /* Sheet / modal */
+  .scrim { position: fixed; inset: 0; background: rgba(10,7,5,0.6); backdrop-filter: blur(3px); z-index: 100; opacity: 0; animation: fade .2s forwards; }
+  @keyframes fade { to { opacity: 1; } }
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 101; max-width: 720px; margin: 0 auto;
+    background: linear-gradient(180deg, var(--panel), var(--bg2)); border: 1px solid var(--line);
+    border-radius: 22px 22px 0 0; padding: 8px 16px calc(env(safe-area-inset-bottom) + 20px);
+    max-height: 92vh; overflow-y: auto; transform: translateY(100%); animation: slideup .28s cubic-bezier(.2,.9,.3,1) forwards;
+    box-shadow: 0 -20px 60px rgba(0,0,0,.5);
+  }
+  @keyframes slideup { to { transform: translateY(0); } }
+  .grab { width: 42px; height: 5px; background: var(--line); border-radius: 3px; margin: 6px auto 14px; }
+  .sheet h3 { font-family:'Fraunces',serif; font-weight: 900; font-size: 24px; margin: 0 0 2px; }
+  .sheet .sub { font-family:'DM Mono',monospace; font-size: 11px; color: var(--ink-faint); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 16px; }
+  .formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+  .formgrid .full { grid-column: 1 / -1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 4px 0 2px; }
+  .chip { font-family:'DM Mono',monospace; font-size: 12px; padding: 7px 11px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim); cursor: pointer; transition: all .12s; }
+  .chip.on { background: linear-gradient(160deg, var(--gold), var(--gold-soft)); color: #2a1c0c; border-color: transparent; font-weight: 600; }
+  .chip.rust.on { background: linear-gradient(160deg, var(--rust), #9c3f1e); color: #fff; }
+  .calcnote { font-family:'DM Mono',monospace; font-size: 12px; color: var(--green); margin: 6px 2px 0; }
+  .sheet .actions { margin-top: 18px; }
+
+  .ocrbox { border: 1px dashed var(--line); border-radius: 12px; padding: 14px; text-align: center; color: var(--ink-faint); font-size: 13px; margin-bottom: 14px; }
+  .ocrbox.busy { border-color: var(--gold-soft); color: var(--gold); }
+  .ocrprog { font-family:'DM Mono',monospace; font-size: 11px; margin-top: 6px; }
+  .roleinfo { font-family:'DM Mono',monospace; font-size:11px; color: var(--ink-faint); margin: 2px 2px 0; }
+  .hide { display: none; }
+  .footer { text-align: center; font-family:'DM Mono',monospace; font-size: 10px; color: var(--ink-faint); letter-spacing: 1px; margin-top: 28px; }
+  .toast { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 20px); left: 50%; transform: translateX(-50%); background: var(--green); color: #0e1a08; font-weight: 600; padding: 12px 20px; border-radius: 12px; z-index: 200; font-size: 14px; box-shadow: 0 8px 30px rgba(0,0,0,.4); animation: fade .2s; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useMemo, useRef } = React;
+
+const WEEKDAYS = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+// Column roles -> which sheet column the worked hours go into
+const ROLES = [
+  { key: 'sipo',  label: 'Sipo/Arbeiter', col: 'F' },
+  { key: 'hfe',   label: 'HFE/HBB/Erder', col: 'G' },
+  { key: 'sakra', label: 'Sakra/Bediener/Büp', col: 'H' },
+  { key: 'sakrapu', label: 'Sakra PU/TH-Büp', col: 'I' },
+  { key: 'azf',   label: 'Azf/Sakra Technik', col: 'J' },
+];
+const SPECIAL = [
+  { key: 'sfpa',  label: 'S/F/P/A (Feiertag)', col: 'K' },
+  { key: 'urlaub',label: 'Urlaub', col: 'L' },
+  { key: 'krank', label: 'Krank', col: 'M' },
+];
+
+const STORAGE_KEY = 'auslose_v1';
+
+function parseTimeRange(str) {
+  // accepts "7.30 - 16.00", "19.00-7.00", "5.00 - 15.30"
+  if (!str) return null;
+  const m = str.replace(/\s/g,'').match(/(\d{1,2})[.:](\d{2})-(\d{1,2})[.:](\d{2})/);
+  if (!m) return null;
+  let [_, h1, m1, h2, m2] = m;
+  let start = (+h1) + (+m1)/60;
+  let end = (+h2) + (+m2)/60;
+  if (end <= start) end += 24; // overnight
+  return end - start;
+}
+
+function computeHours(entry) {
+  if (entry.special && entry.special !== 'sfpa_only') {
+    return entry.specialHours || 0;
+  }
+  if (entry.role === 'sfpa' || entry.role === 'urlaub' || entry.role === 'krank') {
+    return entry.manualHours || 0;
+  }
+  const dur = parseTimeRange(entry.time);
+  if (dur == null) return entry.manualHours || 0;
+  const pause = parseFloat(entry.pause) || 0;
+  return Math.round((dur - pause) * 100) / 100;
+}
+
+function blankEntry() {
+  return { site:'', bst:'', time:'', pause:'0.5', role:'sipo', special:'', manualHours:'', auslose:'', km:'' };
+}
+
+function daysInMonth(monthIdx, year) {
+  return new Date(year, monthIdx+1, 0).getDate();
+}
+
+function App() {
+  const now = new Date();
+  const [state, setState] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch(e){}
+    return {
+      name: 'Akkarachai Suramphai',
+      company: 'Bahndienste Lang',
+      month: 4, // Mai (0-indexed)
+      year: 2026,
+      abrechnung: '',
+      entries: {},
+    };
+  });
+  const [editDay, setEditDay] = useState(null);
+  const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [state]);
+
+  const numDays = daysInMonth(state.month, state.year);
+
+  const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(''), 2200); };
+
+  const total = useMemo(() => {
+    let t = 0;
+    for (let d=1; d<=numDays; d++) {
+      const e = state.entries[d];
+      if (e) t += computeHours(e);
+    }
+    return Math.round(t*100)/100;
+  }, [state.entries, numDays]);
+
+  const abr = parseFloat(state.abrechnung);
+  const guthaben = !isNaN(abr) ? Math.round((total - abr)*100)/100 : null;
+
+  function weekdayFor(day) {
+    return WEEKDAYS[new Date(state.year, state.month, day).getDay()];
+  }
+
+  function saveEntry(day, entry) {
+    setState(s => ({ ...s, entries: { ...s.entries, [day]: entry } }));
+  }
+  function clearEntry(day) {
+    setState(s => { const e = {...s.entries}; delete e[day]; return {...s, entries: e}; });
+  }
+
+  function exportXlsx() {
+    const wb = XLSX.utils.book_new();
+    const aoa = [];
+    // header rows
+    aoa.push([state.company + '   Name:', '', state.name, '', 'Stundenvorlage   Monat: ' + MONTHS[state.month], '','','','','','','','','','', 'Jahr:', state.year]);
+    aoa.push([]);
+    aoa.push(['Tag','Baustelle','Bst.-Nr.','Arbeitszeit','Pause','Sipo, Arbeiter','HFE, HBB, Erder','Sakra, Bediener, Büp, SAS','Sakra PU / TH-Büp','Azf/ Sakra Technik','S/F/P/A','Urlaub','Krank','NA','SO','F','Auslöse','km']);
+    aoa.push(['','','','von-bis']);
+    aoa.push([' ','Übertrag']);
+    for (let d=1; d<=numDays; d++) {
+      const e = state.entries[d];
+      const row = new Array(18).fill('');
+      row[0] = d;
+      if (e) {
+        row[1] = e.site || '';
+        row[2] = e.bst || '';
+        row[3] = e.time || '';
+        row[4] = e.pause || '';
+        const hrs = computeHours(e);
+        const colMap = { F:5,G:6,H:7,I:8,J:9,K:10,L:11,M:12 };
+        let col = 'F';
+        if (e.special && SPECIAL.find(x=>x.key===e.special)) col = SPECIAL.find(x=>x.key===e.special).col;
+        else { const r = ROLES.find(x=>x.key===e.role); if (r) col = r.col; }
+        if (hrs) row[colMap[col]] = hrs;
+        row[16] = e.auslose || '';
+        row[17] = e.km || '';
+      }
+      aoa.push(row);
+    }
+    aoa.push(['','Gesamtstunden','','','', total]);
+    aoa.push(['','zu Guthaben +','','','', guthaben != null && guthaben>0 ? guthaben : '']);
+    aoa.push(['','aus Guthaben -','','','', guthaben != null && guthaben<0 ? Math.abs(guthaben) : '']);
+    aoa.push(['','Stunden zur Abrechnung','','','', state.abrechnung || '']);
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:5},{wch:22},{wch:8},{wch:12},{wch:6},{wch:10},{wch:10},{wch:12},{wch:12},{wch:10},{wch:8},{wch:8},{wch:8},{wch:5},{wch:5},{wch:5},{wch:8},{wch:6}];
+    XLSX.utils.book_append_sheet(wb, ws, 'Neu');
+    XLSX.writeFile(wb, `Auslöse_Art_${MONTHS[state.month]}.xlsx`);
+    showToast('Excel exportiert ✓');
+  }
+
+  return (
+    <div>
+      <div className="topbar">
+        <div className="brand">
+          <h1>Auslöse</h1>
+          <span className="tag">Stundenzettel</span>
+        </div>
+        <div className="monthrow">
+          <div className="field">
+            <label>Monat</label>
+            <select value={state.month} onChange={e=>setState(s=>({...s, month:+e.target.value}))}>
+              {MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Jahr</label>
+            <input type="number" value={state.year} onChange={e=>setState(s=>({...s, year:+e.target.value}))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="daygrid">
+        {Array.from({length:numDays}, (_,i)=>i+1).map(day => {
+          const e = state.entries[day];
+          const wd = weekdayFor(day);
+          const isWeekend = wd==='Sa' || wd==='So';
+          const isFeier = e && e.special==='sfpa';
+          const hrs = e ? computeHours(e) : 0;
+          let metaParts = [];
+          if (e) {
+            if (e.bst) metaParts.push('Bst ' + e.bst);
+            if (e.time) metaParts.push(e.time);
+          }
+          return (
+            <div key={day}
+              className={'daycard ' + (e?'filled ':'') + (isWeekend?'weekend ':'') + (isFeier?'feier':'')}
+              onClick={()=>setEditDay(day)}>
+              <div className="daynum">{day}</div>
+              <div className="dayinfo">
+                <div className="wd">{wd}</div>
+                <div className={'site ' + (e&&e.site?'':'empty')}>{e&&e.site ? e.site : 'leer — tippen zum Eintragen'}</div>
+                {metaParts.length>0 && <div className="meta">{metaParts.join('  ·  ')}{e.auslose?<span>  ·  Auslöse {e.auslose}</span>:null}</div>}
+              </div>
+              {hrs>0 && <div className="hourspill">{hrs}h</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="totals">
+        <h2>Abrechnung</h2>
+        <div className="totrow"><span className="lbl">Gesamtstunden</span><span className="val big">{total}</span></div>
+        <div className="totrow">
+          <span className="lbl">Stunden zur Abrechnung</span>
+          <input type="number" inputMode="decimal" placeholder="z.B. 170" value={state.abrechnung} onChange={e=>setState(s=>({...s, abrechnung:e.target.value}))} />
+        </div>
+        {guthaben != null && (
+          <div className="totrow">
+            <span className="lbl">{guthaben>=0 ? 'zu Guthaben +' : 'aus Guthaben −'}</span>
+            <span className="val" style={{color: guthaben>=0?'var(--green)':'var(--red)'}}>{Math.abs(guthaben)}</span>
+          </div>
+        )}
+      </div>
+
+      <div className="actions">
+        <button className="btn btn-primary" onClick={exportXlsx}>↓ Excel exportieren</button>
+      </div>
+      <div className="actions">
+        <button className="btn btn-ghost" onClick={()=>{ if(confirm('Alle Einträge dieses Monats löschen?')){ setState(s=>({...s, entries:{}, abrechnung:''})); showToast('Geleert'); } }}>Monat leeren</button>
+      </div>
+
+      <div className="footer">LOKAL GESPEICHERT · KEIN SERVER · {state.name.toUpperCase()}</div>
+
+      {editDay && (
+        <DayEditor
+          day={editDay}
+          weekday={weekdayFor(editDay)}
+          entry={state.entries[editDay] || blankEntry()}
+          existing={!!state.entries[editDay]}
+          onClose={()=>setEditDay(null)}
+          onSave={(en)=>{ saveEntry(editDay, en); setEditDay(null); showToast('Tag '+editDay+' gespeichert'); }}
+          onClear={()=>{ clearEntry(editDay); setEditDay(null); showToast('Tag '+editDay+' geleert'); }}
+        />
+      )}
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+function DayEditor({ day, weekday, entry, existing, onClose, onSave, onClear }) {
+  const [e, setE] = useState(entry);
+  const [ocrBusy, setOcrBusy] = useState(false);
+  const [ocrProg, setOcrProg] = useState('');
+  const fileRef = useRef();
+  const upd = (k,v) => setE(p=>({...p,[k]:v}));
+
+  const isSpecial = !!e.special;
+  const liveHours = computeHours(e);
+
+  async function runOCR(file) {
+    setOcrBusy(true); setOcrProg('Lade OCR…');
+    try {
+      const { data } = await Tesseract.recognize(file, 'deu', {
+        logger: m => { if (m.status==='recognizing text') setOcrProg('Erkenne Text… '+Math.round(m.progress*100)+'%'); }
+      });
+      const text = data.text;
+      // heuristic extraction
+      const timeM = text.replace(/\s/g,'').match(/(\d{1,2}[.:]\d{2})-(\d{1,2}[.:]\d{2})/);
+      const bstM = text.match(/\b(\d{2,3})\b(?=[^\d]*$)/m);
+      // TP line
+      const tpM = text.match(/TP[:\s]+(?:Bf\.?\s*)?([A-Za-zÄÖÜäöüß\-\/ ]{3,40})/);
+      const next = {...e};
+      if (timeM) next.time = timeM[1].replace(':','.') + ' - ' + timeM[2].replace(':','.');
+      if (tpM) next.site = tpM[1].trim().replace(/\s*\/.*$/,'');
+      // pick first plausible Bst (2-3 digit number near "Bst" or standalone)
+      const bstLine = text.match(/(\d{2,3})\s*$/m);
+      if (bstLine) next.bst = bstLine[1];
+      setE(next);
+      setOcrProg('Fertig — bitte prüfen ✓');
+    } catch(err) {
+      setOcrProg('Fehler beim Lesen');
+    }
+    setOcrBusy(false);
+  }
+
+  return (
+    <>
+      <div className="scrim" onClick={onClose}></div>
+      <div className="sheet">
+        <div className="grab"></div>
+        <h3>Tag {day}</h3>
+        <div className="sub">{weekday} · {existing?'bearbeiten':'neuer Eintrag'}</div>
+
+        <div className={'ocrbox ' + (ocrBusy?'busy':'')} onClick={()=>!ocrBusy && fileRef.current.click()}>
+          {ocrBusy ? <>📷 {ocrProg}</> : <>📷 Dispo-Screenshot scannen (optional)<br/><span style={{fontSize:11}}>tippen zum Auswählen — füllt Felder vor</span></>}
+          <input ref={fileRef} type="file" accept="image/*" className="hide" onChange={ev=>{ if(ev.target.files[0]) runOCR(ev.target.files[0]); }} />
+          {ocrProg && !ocrBusy && <div className="ocrprog">{ocrProg}</div>}
+        </div>
+
+        <div className="chips">
+          <div className={'chip rust ' + (e.special==='sfpa'?'on':'')} onClick={()=>upd('special', e.special==='sfpa'?'':'sfpa')}>Feiertag (8 SFPA)</div>
+          <div className={'chip ' + (e.special==='urlaub'?'on':'')} onClick={()=>upd('special', e.special==='urlaub'?'':'urlaub')}>Urlaub</div>
+          <div className={'chip ' + (e.special==='krank'?'on':'')} onClick={()=>upd('special', e.special==='krank'?'':'krank')}>Krank</div>
+        </div>
+
+        {e.special === 'sfpa' ? (
+          <div className="formgrid" style={{marginTop:12}}>
+            <div className="full field"><label>Bezeichnung</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="Feiertag" /></div>
+            <div className="field"><label>Stunden (S/F/P/A)</label><input type="number" inputMode="decimal" value={e.manualHours||'8'} onChange={ev=>upd('manualHours',ev.target.value)} /></div>
+          </div>
+        ) : (e.special === 'urlaub' || e.special === 'krank') ? (
+          <div className="formgrid" style={{marginTop:12}}>
+            <div className="full field"><label>Bezeichnung</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder={e.special==='urlaub'?'Urlaub':'Krank'} /></div>
+            <div className="field"><label>Stunden</label><input type="number" inputMode="decimal" value={e.manualHours||'8'} onChange={ev=>upd('manualHours',ev.target.value)} /></div>
+          </div>
+        ) : (
+          <>
+            <div className="formgrid" style={{marginTop:12}}>
+              <div className="full field"><label>Baustelle</label><input value={e.site} onChange={ev=>upd('site',ev.target.value)} placeholder="z.B. Marktleuthen" /></div>
+              <div className="field"><label>Bst.-Nr.</label><input inputMode="numeric" value={e.bst} onChange={ev=>upd('bst',ev.target.value)} placeholder="134" /></div>
+              <div className="field"><label>Auslöse</label><input inputMode="numeric" value={e.auslose} onChange={ev=>upd('auslose',ev.target.value)} placeholder="14" /></div>
+              <div className="field"><label>Arbeitszeit (von-bis)</label><input value={e.time} onChange={ev=>upd('time',ev.target.value)} placeholder="7.00 - 15.30" /></div>
+              <div className="field"><label>Pause (h)</label><input inputMode="decimal" value={e.pause} onChange={ev=>upd('pause',ev.target.value)} placeholder="0.5" /></div>
+              <div className="full field"><label>km (optional)</label><input inputMode="numeric" value={e.km} onChange={ev=>upd('km',ev.target.value)} placeholder="" /></div>
+            </div>
+            <div className="roleinfo">Tätigkeit → Spalte für die Stunden:</div>
+            <div className="chips">
+              {ROLES.map(r => (
+                <div key={r.key} className={'chip ' + (e.role===r.key?'on':'')} onClick={()=>upd('role',r.key)}>{r.label}</div>
+              ))}
+            </div>
+            {liveHours>0 && <div className="calcnote">→ {liveHours} Std. werden in „{(ROLES.find(r=>r.key===e.role)||{}).label}" eingetragen</div>}
+          </>
+        )}
+
+        <div className="actions">
+          <button className="btn btn-primary" onClick={()=>onSave(e)}>Speichern</button>
+          {existing && <button className="btn btn-rust" onClick={onClear}>Löschen</button>}
+        </div>
+        <div className="actions">
+          <button className="btn btn-ghost" onClick={onClose}>Abbrechen</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>

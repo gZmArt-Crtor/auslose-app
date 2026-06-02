@@ -262,8 +262,9 @@ function App() {
     return Math.round(t*100)/100;
   }, [state.entries, numDays]);
 
-  const abr = parseFloat(state.abrechnung);
-  const guthaben = !isNaN(abr) ? Math.round((total - abr)*100)/100 : null;
+  const ausGuthaben = parseFloat(state.ausGuthaben) || 0;
+  const zuGuthaben = parseFloat(state.zuGuthaben) || 0;
+  const abrechnung = Math.round((total + ausGuthaben - zuGuthaben) * 100) / 100;
 
   function weekdayFor(day) {
     return WEEKDAYS[new Date(state.year, state.month, day).getDay()];
@@ -339,9 +340,9 @@ function App() {
       }
 
       // ── Summary rows (fixed at 38-40) ──
-      if (guthaben != null && guthaben > 0)  setNum('F38', guthaben);
-      if (guthaben != null && guthaben < 0)  setNum('F39', Math.abs(guthaben));
-      if (state.abrechnung) setNum('F40', parseFloat(state.abrechnung));
+      if (ausGuthaben > 0) setNum('F39', ausGuthaben);
+      if (zuGuthaben > 0)  setNum('F38', zuGuthaben);
+      if (abrechnung)      setNum('F40', abrechnung);
 
       // ── Signature row ──
       const today = new Date().toLocaleDateString('de-DE');
@@ -370,7 +371,7 @@ function App() {
         <div className="brand">
           <h1>Auslöse</h1>
           <span className="tag">Stundenzettel</span>
-          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.5</span>
+          <span style={{marginLeft:'auto', fontFamily:'\'DM Mono\',monospace', fontSize:11, color:'var(--ink-faint)', letterSpacing:'1px'}}>v1.4.6</span>
         </div>
         <div className="monthrow">
           <div className="field" style={{flex:2}}>
@@ -429,22 +430,24 @@ function App() {
         <h2>Abrechnung</h2>
         <div className="totrow"><span className="lbl">Gesamtstunden</span><span className="val big">{total}</span></div>
         <div className="totrow">
-          <span className="lbl">Stunden zur Abrechnung</span>
-          <input type="number" inputMode="decimal" placeholder="z.B. 170" value={state.abrechnung} onChange={e=>setState(s=>({...s, abrechnung:e.target.value}))} />
+          <span className="lbl">Stunden aus Guthaben +</span>
+          <input type="number" inputMode="decimal" placeholder="0" value={state.ausGuthaben||''} onChange={e=>setState(s=>({...s, ausGuthaben:e.target.value}))} onFocus={e=>e.target.select()} autoComplete="off" />
         </div>
-        {guthaben != null && (
-          <div className="totrow">
-            <span className="lbl">{guthaben>=0 ? 'zu Guthaben +' : 'aus Guthaben −'}</span>
-            <span className="val" style={{color: guthaben>=0?'var(--green)':'var(--red)'}}>{Math.abs(guthaben)}</span>
-          </div>
-        )}
+        <div className="totrow">
+          <span className="lbl">Stunden zu Guthaben −</span>
+          <input type="number" inputMode="decimal" placeholder="0" value={state.zuGuthaben||''} onChange={e=>setState(s=>({...s, zuGuthaben:e.target.value}))} onFocus={e=>e.target.select()} autoComplete="off" />
+        </div>
+        <div className="totrow">
+          <span className="lbl">Stunden zur Abrechnung</span>
+          <span className="val big" style={{color:'var(--gold)'}}>{abrechnung}</span>
+        </div>
       </div>
 
       <div className="actions">
         <button className="btn btn-primary" onClick={exportXlsx}>↓ Excel exportieren</button>
       </div>
       <div className="actions">
-        <button className="btn btn-ghost" onClick={()=>{ if(confirm('Alle Einträge dieses Monats löschen?')){ setState(s=>({...s, entries:{}, abrechnung:''})); showToast('Geleert'); } }}>Monat leeren</button>
+        <button className="btn btn-ghost" onClick={()=>{ if(confirm('Alle Einträge dieses Monats löschen?')){ setState(s=>({...s, entries:{}, ausGuthaben:'', zuGuthaben:''})); showToast('Geleert'); } }}>Monat leeren</button>
       </div>
 
       <div className="footer">LOKAL GESPEICHERT · KEIN SERVER · {state.name.toUpperCase()}</div>

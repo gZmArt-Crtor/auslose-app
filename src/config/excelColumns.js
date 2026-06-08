@@ -1,5 +1,4 @@
-// Column map for the company .xlsx template (sheet1) — the single source of truth.
-// When the template layout changes (H1), update ONLY this file.
+// Column map for the company .xlsx template (sheet1)
 //
 // Data rows: calendar day d is written to row (d + ROW_OFFSET), i.e. day 1 -> row 6.
 // Header labels (from the live template) for reference:

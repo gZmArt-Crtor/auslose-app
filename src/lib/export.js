@@ -67,9 +67,8 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
         if (s1hrs > 0) {
           setNum(`${roleCol(e.role)}${r}`, s1hrs);
           if (dayHol || nextHol) {
-            const rawDur = shiftHours(e.startH || 7, e.startM || 0, e.endH || 15, e.endM || 30, 0);
             const rawOverlap = feiertagOverlap(e.startH || 7, e.startM || 0, e.endH || 15, e.endM || 30, dayHol, nextHol);
-            const fh1 = rawDur > 0 ? Math.round((s1hrs * rawOverlap / rawDur) * 100) / 100 : 0;
+            const fh1 = Math.round(rawOverlap * 100) / 100;
             if (fh1 > 0) setNum(`${C.feiertag}${r}`, fh1);
           }
         }
@@ -85,13 +84,11 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
               if (s2col === roleCol(e.role)) setNum(`${s2col}${r}`, Math.round((s1hrs + s2hrs) * 100) / 100);
               else setNum(`${s2col}${r}`, s2hrs);
               if (dayHol || nextHol) {
-                const s2RawDur = shiftHours(e.s2startH || 22, e.s2startM || 0, e.s2endH || 4, e.s2endM || 30, 0);
                 const s2RawOverlap = feiertagOverlap(e.s2startH || 22, e.s2startM || 0, e.s2endH || 4, e.s2endM || 30, dayHol, nextHol);
-                const fh2 = s2RawDur > 0 ? Math.round((s2hrs * s2RawOverlap / s2RawDur) * 100) / 100 : 0;
+                const fh2 = Math.round(s2RawOverlap * 100) / 100;
                 if (fh2 > 0) {
-                  const rawDur1 = shiftHours(e.startH || 7, e.startM || 0, e.endH || 15, e.endM || 30, 0);
                   const rawOvlp1 = feiertagOverlap(e.startH || 7, e.startM || 0, e.endH || 15, e.endM || 30, dayHol, nextHol);
-                  const fh1 = rawDur1 > 0 ? Math.round((s1hrs * rawOvlp1 / rawDur1) * 100) / 100 : 0;
+                  const fh1 = Math.round(rawOvlp1 * 100) / 100;
                   setNum(`${C.feiertag}${r}`, Math.round((fh1 + fh2) * 100) / 100);
                 }
               }

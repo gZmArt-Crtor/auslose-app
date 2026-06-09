@@ -21,9 +21,15 @@ export function nightHours(startH, startM, endH, endM) {
   const start = (+startH) + (+startM || 0) / 60;
   let end = (+endH) + (+endM || 0) / 60;
   if (end <= start) end += 24;
-  const overlapStart = Math.max(start, 22);
-  const overlapEnd = Math.min(end, 30); // 30 = 06:00 next day
-  return overlapEnd > overlapStart ? Math.round((overlapEnd - overlapStart) * 100) / 100 : 0;
+  // Early-morning window [0, 6] — catches shifts starting before 06:00 that don't cross midnight
+  const mornStart = Math.max(start, 0);
+  const mornEnd   = Math.min(end, 6);
+  const morning   = mornEnd > mornStart ? mornEnd - mornStart : 0;
+  // Late-night window [22, 30] — 30 = 06:00 next day, for overnight shifts
+  const lateStart = Math.max(start, 22);
+  const lateEnd   = Math.min(end, 30);
+  const late      = lateEnd > lateStart ? lateEnd - lateStart : 0;
+  return Math.round((morning + late) * 100) / 100;
 }
 
 export const PURE_SPECIALS = ['urlaub', 'krank', 'schulung', 'bahnarzt', 'sfpa'];

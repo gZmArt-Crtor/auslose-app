@@ -9,6 +9,9 @@ import {
 // Pure transform: takes the sheet1.xml string + one month of data, returns patched XML.
 // Kept browser-free so the column mapping (roles, Ausfall, Feiertag, night, Sunday) is testable.
 export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, ausGuthaben, zuGuthaben }) {
+  // New-style templates use self-closing empty cells (<c r="B6" s="24"/>).
+  // Expand them so the regex patterns below can match and write into them.
+  xml = xml.replace(/<c ([^>]*?)\/>/g, '<c $1></c>');
   const aus = parseFloat(ausGuthaben) || 0;
   const zu = parseFloat(zuGuthaben) || 0;
   let total = 0;

@@ -1,4 +1,4 @@
-// Bavaria public holidays (auto-detect)
+// Bavaria public holidays Algorithm Gauss(auto-detect)
 export function easterDate(year) {
   const a = year % 19, b = Math.floor(year / 100), c = year % 100;
   const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);

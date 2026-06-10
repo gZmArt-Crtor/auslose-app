@@ -125,7 +125,7 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
 // Loads the template, patches one month, and triggers a download in the browser.
 export async function exportXlsx(params) {
   // Served from public/ (cached by the service worker for offline use).
-  const templateUrl = `${import.meta.env.BASE_URL}template.xlsx`;
+  const templateUrl = `${import.meta.env.BASE_URL}Template.xlsx`;
   const resp = await fetch(templateUrl);
   if (!resp.ok) throw new Error('Vorlage nicht gefunden');
   const data = await resp.arrayBuffer();

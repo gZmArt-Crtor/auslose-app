@@ -6,9 +6,9 @@ export const MONTHS = [
 
 // Activity roles. The sheet column for each is defined in config/excelColumns.js.
 export const ROLES = [
-  { key: 'sipo', label: 'Sipo/Arbeiter' },
-  { key: 'hfe', label: 'HFE/HBB/Erder' },
-  { key: 'sakra', label: 'Sakra/Bediener/Büp' },
-  { key: 'sakrapu', label: 'Sakra PU/TH-Büp' },
-  { key: 'azf', label: 'Azf/Sakra Technik' },
+  { key: 'sipo', label: 'Sipo/ASP' },
+  { key: 'hfe', label: 'HFE/HBB/Arbeiter' },
+  { key: 'sakra', label: 'Sakra/Büp/Bediener/Monteur' },
+  { key: 'sakrapu', label: 'PU Sakra + Bediener' },
+  { key: 'azf', label: 'SAS/Erder(auch PU)' },
 ];

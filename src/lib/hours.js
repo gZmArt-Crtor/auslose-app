@@ -17,19 +17,25 @@ export function shiftHours(startH, startM, endH, endM, pause) {
   return Math.round(((end - start) - (parseFloat(pause) || 0)) * 100) / 100;
 }
 
-export function nightHours(startH, startM, endH, endM) {
+// Night-surcharge segments (23:00–06:00) of a shift, in shifted-clock hours
+// (24–30 = next-day 00:00–06:00). Shared by the NA total and the editor preview.
+export function nightSegments(startH, startM, endH, endM) {
   const start = (+startH) + (+startM || 0) / 60;
   let end = (+endH) + (+endM || 0) / 60;
   if (end <= start) end += 24;
-  // Early-morning window [0, 6] — catches shifts starting before 06:00 that don't cross midnight
-  const mornStart = Math.max(start, 0);
-  const mornEnd   = Math.min(end, 6);
-  const morning   = mornEnd > mornStart ? mornEnd - mornStart : 0;
-  // Late-night window [22, 30] — 30 = 06:00 next day, for overnight shifts
-  const lateStart = Math.max(start, 22);
-  const lateEnd   = Math.min(end, 30);
-  const late      = lateEnd > lateStart ? lateEnd - lateStart : 0;
-  return Math.round((morning + late) * 100) / 100;
+  const segs = [];
+  const mS = Math.max(start, 0), mE = Math.min(end, 6);   // early-morning [0, 6]
+  if (mE > mS) segs.push({ start: mS, end: mE });
+  const lS = Math.max(start, 23), lE = Math.min(end, 30); // late-night [23, 30]
+  if (lE > lS) segs.push({ start: lS, end: lE });
+  return segs;
+}
+
+export function nightHours(startH, startM, endH, endM, pause) {
+  const raw = nightSegments(startH, startM, endH, endM)
+    .reduce((s, seg) => s + (seg.end - seg.start), 0);
+  const net = raw - (parseFloat(pause) || 0);
+  return net > 0 ? Math.round(net * 100) / 100 : 0;
 }
 
 export const PURE_SPECIALS = ['urlaub', 'krank', 'schulung', 'bahnarzt', 'sfpa'];

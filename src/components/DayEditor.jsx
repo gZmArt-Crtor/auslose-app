@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import Tesseract from 'tesseract.js';
 import { ROLES } from '../config/constants.js';
 import { isHoliday } from '../lib/holidays.js';
-import { shiftHours, blankEntry, specialEntry, normalizeEntry, isPureSpecial } from '../lib/hours.js';
+import { shiftHours, blankEntry, specialEntry, normalizeEntry, isPureSpecial, nightSegments } from '../lib/hours.js';
 import { useBackToClose } from '../hooks/useBackToClose.js';
 import { useSheetSwipe } from '../hooks/useSheetSwipe.js';
 
@@ -129,10 +129,11 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
                 else feierEnd = end;
               }
 
-              const nightStart = 22, nightEnd = 30;
-              const nStart = Math.max(start, nightStart);
-              const nEnd = Math.min(end, nightEnd);
-              const hasNight = nEnd > nStart;
+              const nightSegs = nightSegments(e.startH, e.startM, e.endH, e.endM);
+              const nightRaw = nightSegs.reduce((s, seg) => s + (seg.end - seg.start), 0);
+              const pauseH = parseFloat(e.pause) || 0;
+              const nightNet = Math.max(0, Math.round((nightRaw - pauseH) * 100) / 100);
+              const hasNight = nightNet > 0;
 
               if (!feierStart && !hasNight) return null;
 
@@ -147,7 +148,7 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
                     <span>🎉 Feiertagszuschlag: {fmt(feierStart)} – {fmt(feierEnd)} ({Math.round((feierEnd - feierStart) * 100) / 100}h) → Zuschläge F</span>
                   )}
                   {hasNight && (
-                    <span>🌙 Nachtzuschlag: {fmt(nStart)} – {fmt(nEnd)} ({Math.round((nEnd - nStart) * 100) / 100}h) → NA</span>
+                    <span>🌙 Nachtzuschlag: {nightSegs.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')} = {nightNet}h → NA{pauseH > 0 ? ` (abzgl. ${pauseH}h Pause)` : ''}</span>
                   )}
                 </div>
               );

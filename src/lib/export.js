@@ -106,9 +106,9 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
     if (isSunday && hrs && !pureSpecial) setNum(`${C.sunday}${r}`, hrs);
 
     if (!e.special && e.startH !== undefined) {
-      let totalNight = nightHours(e.startH, e.startM, e.endH, e.endM);
+      let totalNight = nightHours(e.startH, e.startM, e.endH, e.endM, e.pause);
       // Ausfall shift 2 has no real clock time, so it never contributes night hours.
-      if (e.doubleShift && !e.s2ausfall) totalNight += nightHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM);
+      if (e.doubleShift && !e.s2ausfall) totalNight += nightHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM, e.s2pause);
       if (totalNight > 0) setNum(`${C.night}${r}`, totalNight);
     }
   }

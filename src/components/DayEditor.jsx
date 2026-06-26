@@ -6,7 +6,7 @@ import { shiftHours, blankEntry, specialEntry, normalizeEntry, isPureSpecial } f
 import { useBackToClose } from '../hooks/useBackToClose.js';
 import { useSheetSwipe } from '../hooks/useSheetSwipe.js';
 
-export default function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, existing, onClose, onSave, onClear }) {
+export default function DayEditor({ day, numDays, year, month, weekday, weekdayFor, entry, existing, entries, onClose, onSave, onClear }) {
   const sheetRef = useRef(null);
   useBackToClose(true, onClose);
   useSheetSwipe(onClose, sheetRef);
@@ -271,13 +271,17 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
         <div className="field" style={{ marginTop: 14 }}>
           <label>Auch eintragen für</label>
           <div className="chips" style={{ flexWrap: 'wrap' }}>
-            {Array.from({ length: numDays }, (_, i) => i + 1).filter(d => d !== day).map(d => (
-              <div key={d} className={'chip ' + (extraDays.includes(d) ? 'on' : '')} onClick={() => toggleDay(d)}
-                style={{ minWidth: 40, textAlign: 'center', padding: '6px 8px' }}>
-                <span style={{ fontFamily: 'DM Mono,monospace', fontSize: 12 }}>{d}</span>
-                <span style={{ fontSize: 10, color: extraDays.includes(d) ? 'inherit' : 'var(--ink-faint)', marginLeft: 3 }}>{weekdayFor(d)}</span>
-              </div>
-            ))}
+            {Array.from({ length: numDays }, (_, i) => i + 1).filter(d => d !== day).map(d => {
+              const filled = !!(entries && entries[d]); // day already has data — don't allow overwriting via copy
+              return (
+                <div key={d} className={'chip ' + (extraDays.includes(d) ? 'on' : '')}
+                  aria-disabled={filled} onClick={() => { if (!filled) toggleDay(d); }}
+                  style={{ minWidth: 40, textAlign: 'center', padding: '6px 8px', opacity: filled ? 0.35 : 1, cursor: filled ? 'default' : 'pointer' }}>
+                  <span style={{ fontFamily: 'DM Mono,monospace', fontSize: 12 }}>{d}</span>
+                  <span style={{ fontSize: 10, color: extraDays.includes(d) ? 'inherit' : 'var(--ink-faint)', marginLeft: 3 }}>{weekdayFor(d)}</span>
+                </div>
+              );
+            })}
           </div>
           {extraDays.length > 0 && <div className="calcnote">→ wird in {extraDays.length + 1} Tagen eingetragen</div>}
         </div>

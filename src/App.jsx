@@ -244,6 +244,7 @@ export default function App() {
           weekdayFor={weekdayFor}
           entry={entries[editDay] || blankEntry()}
           existing={!!entries[editDay]}
+          entries={entries}
           onClose={closeEditor}
           onSave={(en, extraDays) => {
             saveDays(editDay, en, extraDays);

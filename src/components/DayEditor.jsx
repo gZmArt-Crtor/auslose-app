@@ -195,7 +195,7 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
             <div className="field" style={{ marginTop: 11 }}>
               <label>Pause</label>
               <div className="chips">
-                {[['0.5', '30 min'], ['0.75', '45 min'], ['1', '60 min']].map(([val, lbl]) => (
+                {[['0', 'keine'], ['0.5', '30 min'], ['0.75', '45 min'], ['1', '60 min']].map(([val, lbl]) => (
                   <div key={val} className={'chip ' + (e.pause === val ? 'on' : '')} onClick={() => upd('pause', val)}>{lbl}</div>
                 ))}
               </div>
@@ -251,7 +251,7 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
                 <div className="field" style={{ marginTop: 11 }}>
                   <label>Schicht 2 — Pause</label>
                   <div className="chips">
-                    {[['0.5', '30 min'], ['0.75', '45 min'], ['1', '60 min']].map(([val, lbl]) => (
+                    {[['0', 'keine'], ['0.5', '30 min'], ['0.75', '45 min'], ['1', '60 min']].map(([val, lbl]) => (
                       <div key={val} className={'chip ' + (e.s2pause === val ? 'on' : '')} onClick={() => upd('s2pause', val)}>{lbl}</div>
                     ))}
                   </div>

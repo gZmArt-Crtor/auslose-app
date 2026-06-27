@@ -148,7 +148,7 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
                     <span>🎉 Feiertagszuschlag: {fmt(feierStart)} – {fmt(feierEnd)} ({Math.round((feierEnd - feierStart) * 100) / 100}h) → Zuschläge F</span>
                   )}
                   {hasNight && (
-                    <span>🌙 Nachtzuschlag: {nightSegs.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')} = {nightNet}h → NA{pauseH > 0 ? ` (abzgl. ${pauseH}h Pause)` : ''}</span>
+                    <span>🌙 Nachtzuschlag: {nightSegs.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')} = {nightNet}h → NA</span>
                   )}
                 </div>
               );

@@ -1,9 +1,9 @@
 import JSZip from 'jszip';
 import { MONTHS } from '../config/constants.js';
 import { COLUMNS as C, SIPO_COL, roleCol, ROW_OFFSET } from '../config/excelColumns.js';
-import { isHoliday, feiertagOverlap } from './holidays.js';
+import { isHoliday } from './holidays.js';
 import {
-  computeHours, dayHours, shiftHours, nightHours, sundayHours, entryToTimeString, siteWithAusfall, isPureSpecial,
+  computeHours, dayHours, shiftHours, nightHours, sundayHours, feiertagHours, entryToTimeString, siteWithAusfall, isPureSpecial,
 } from './hours.js';
 
 // Pure transform: takes the sheet1.xml string + one month of data, returns patched XML.
@@ -71,11 +71,6 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
 
         if (s1hrs > 0) {
           setNum(`${roleCol(e.role)}${r}`, Math.round((s1hrs + floorAdd) * 100) / 100);
-          if (dayHol || nextHol) {
-            const rawOverlap = feiertagOverlap(e.startH || 7, e.startM || 0, e.endH || 15, e.endM || 30, dayHol, nextHol);
-            const fh1 = Math.round(rawOverlap * 100) / 100;
-            if (fh1 > 0) setNum(`${C.feiertag}${r}`, fh1);
-          }
         }
 
         if (e.doubleShift) {
@@ -88,15 +83,6 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
               const s2col = roleCol(e.s2role);
               if (s2col === roleCol(e.role)) setNum(`${s2col}${r}`, Math.round((s1hrs + s2hrs + floorAdd) * 100) / 100);
               else setNum(`${s2col}${r}`, s2hrs);
-              if (dayHol || nextHol) {
-                const s2RawOverlap = feiertagOverlap(e.s2startH || 22, e.s2startM || 0, e.s2endH || 4, e.s2endM || 30, dayHol, nextHol);
-                const fh2 = Math.round(s2RawOverlap * 100) / 100;
-                if (fh2 > 0) {
-                  const rawOvlp1 = feiertagOverlap(e.startH || 7, e.startM || 0, e.endH || 15, e.endM || 30, dayHol, nextHol);
-                  const fh1 = Math.round(rawOvlp1 * 100) / 100;
-                  setNum(`${C.feiertag}${r}`, Math.round((fh1 + fh2) * 100) / 100);
-                }
-              }
             }
           }
         }
@@ -119,6 +105,13 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
       // Ausfall shift 2 has no real clock time, so it never contributes night hours.
       if (e.doubleShift && !e.s2ausfall) totalNight += nightHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM, e.s2pause, dayHol, nextHol);
       if (totalNight > 0) setNum(`${C.night}${r}`, totalNight);
+    }
+
+    // Feiertag (F): holiday-portion hours, split at midnight, minus the break in the holiday window.
+    if (!pureSpecial && e.startH !== undefined && (dayHol || nextHol)) {
+      let fh = feiertagHours(e.startH, e.startM, e.endH, e.endM, e.pause, dayHol, nextHol);
+      if (e.doubleShift && !e.s2ausfall) fh += feiertagHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM, e.s2pause, dayHol, nextHol);
+      if (fh > 0) setNum(`${C.feiertag}${r}`, fh);
     }
   }
 

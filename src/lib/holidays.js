@@ -29,14 +29,3 @@ export function isHoliday(year, monthIdx, day) {
   const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   return holidaySet(d.getFullYear()).has(key);
 }
-
-// Hours of a shift that fall within holiday window(s)
-export function feiertagOverlap(startH, startM, endH, endM, dayIsHol, nextDayIsHol) {
-  const start = (+startH) + (+startM || 0) / 60;
-  let end = (+endH) + (+endM || 0) / 60;
-  if (end <= start) end += 24;
-  let fh = 0;
-  if (dayIsHol) { const segEnd = Math.min(end, 24); if (segEnd > start) fh += segEnd - start; }
-  if (nextDayIsHol && end > 24) fh += end - 24;
-  return Math.round(fh * 100) / 100;
-}

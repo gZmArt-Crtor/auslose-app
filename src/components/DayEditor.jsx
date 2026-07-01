@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import Tesseract from 'tesseract.js';
 import { ROLES } from '../config/constants.js';
 import { isHoliday } from '../lib/holidays.js';
-import { shiftHours, blankEntry, specialEntry, normalizeEntry, isPureSpecial, nightSegments, nightHours } from '../lib/hours.js';
+import { shiftHours, blankEntry, specialEntry, normalizeEntry, isPureSpecial, nightSegments, nightHours, feiertagHours } from '../lib/hours.js';
 import { useBackToClose } from '../hooks/useBackToClose.js';
 import { useSheetSwipe } from '../hooks/useSheetSwipe.js';
 
@@ -133,7 +133,10 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
               const nightNet = nightHours(e.startH, e.startM, e.endH, e.endM, e.pause, todayHol, nextHol);
               const hasNight = nightNet > 0;
 
-              if (!feierStart && !hasNight) return null;
+              const feierNet = feiertagHours(e.startH, e.startM, e.endH, e.endM, e.pause, todayHol, nextHol);
+              const hasFeier = feierNet > 0;
+
+              if (!hasFeier && !hasNight) return null;
 
               const fmt = (h) => {
                 const hh = Math.floor(h % 24); const mm = Math.round((h % 1) * 60);
@@ -142,8 +145,8 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
 
               return (
                 <div style={{ marginTop: 12, padding: '9px 12px', background: 'rgba(224,164,67,0.12)', borderRadius: 10, border: '1px solid var(--gold-soft)', fontFamily: 'DM Mono,monospace', fontSize: 11, color: 'var(--gold)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {feierStart !== null && feierEnd > feierStart && (
-                    <span>🎉 Feiertagszuschlag: {fmt(feierStart)} – {fmt(feierEnd)} ({Math.round((feierEnd - feierStart) * 100) / 100}h) → Zuschläge F</span>
+                  {hasFeier && (
+                    <span>🎉 Feiertagszuschlag: {fmt(feierStart)} – {fmt(feierEnd)} = {feierNet}h → Zuschläge F</span>
                   )}
                   {hasNight && (
                     <span>🌙 Nachtzuschlag: {nightSegs.map(s => `${fmt(s.start)}–${fmt(s.end)}`).join(', ')} = {nightNet}h → NA</span>

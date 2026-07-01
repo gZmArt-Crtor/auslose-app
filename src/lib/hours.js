@@ -80,6 +80,15 @@ export function sundayHours(startH, startM, endH, endM, pause, daySun, nextSun, 
   return netHours(segs, holoIntervals(start, end, dayHol, nextHol), start + 5, start + 5 + p);
 }
 
+// Holiday hours worked on a public holiday, split at midnight, minus the break that falls in the
+// holiday window. Holiday is top priority, so nothing is excluded.
+export function feiertagHours(startH, startM, endH, endM, pause, dayHol, nextHol) {
+  const start = (+startH) + (+startM || 0) / 60;
+  let end = (+endH) + (+endM || 0) / 60; if (end <= start) end += 24;
+  const p = parseFloat(pause) || 0;
+  return netHours(holoIntervals(start, end, dayHol, nextHol), [], start + 5, start + 5 + p);
+}
+
 // Worked hours with the 8h daily minimum applied. Specials are already fixed at 8h.
 export function dayHours(entry) {
   const h = computeHours(entry);

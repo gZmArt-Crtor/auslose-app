@@ -26,16 +26,31 @@ export function nightSegments(startH, startM, endH, endM) {
   const segs = [];
   const mS = Math.max(start, 0), mE = Math.min(end, 6);   // early-morning [0, 6]
   if (mE > mS) segs.push({ start: mS, end: mE });
-  const lS = Math.max(start, 23), lE = Math.min(end, 30); // late-night [23, 30]
+  const lS = Math.max(start, 22), lE = Math.min(end, 30); // late-night [22, 30]
   if (lE > lS) segs.push({ start: lS, end: lE });
   return segs;
 }
 
+// Night hours, with the pause removed only for the part of the break that falls in the
+// night window. The break is taken 5h after shift start (HR rule), so it only reduces the
+// night surcharge when that time lands inside 22:00–06:00.
 export function nightHours(startH, startM, endH, endM, pause) {
-  const raw = nightSegments(startH, startM, endH, endM)
-    .reduce((s, seg) => s + (seg.end - seg.start), 0);
-  const net = raw - (parseFloat(pause) || 0);
-  return net > 0 ? Math.round(net * 100) / 100 : 0;
+  const start = (+startH) + (+startM || 0) / 60;
+  const segs = nightSegments(startH, startM, endH, endM);
+  const p = parseFloat(pause) || 0;
+  const bStart = start + 5, bEnd = bStart + p; // break taken 5h into the shift
+  let total = 0;
+  for (const seg of segs) {
+    const brk = Math.max(0, Math.min(seg.end, bEnd) - Math.max(seg.start, bStart)); // break ∩ segment
+    total += (seg.end - seg.start) - brk;
+  }
+  return total > 0 ? Math.round(total * 100) / 100 : 0;
+}
+
+// Worked hours with the 8h daily minimum applied. Specials are already fixed at 8h.
+export function dayHours(entry) {
+  const h = computeHours(entry);
+  return entry.special ? h : Math.max(8, h);
 }
 
 export const PURE_SPECIALS = ['urlaub', 'krank', 'schulung', 'bahnarzt', 'sfpa'];

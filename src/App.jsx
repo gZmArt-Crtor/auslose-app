@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { WEEKDAYS, MONTHS } from './config/constants.js';
-import { computeHours, blankEntry, entryToTimeString, daysInMonth, siteWithAusfall } from './lib/hours.js';
+import { dayHours, blankEntry, entryToTimeString, daysInMonth, siteWithAusfall } from './lib/hours.js';
 import { isHoliday } from './lib/holidays.js';
 import { exportXlsx } from './lib/export.js';
 import {
@@ -40,7 +40,7 @@ export default function App() {
     let t = 0;
     for (let d = 1; d <= numDays; d++) {
       const e = entries[d];
-      if (e) t += computeHours(e);
+      if (e) t += dayHours(e);
     }
     return Math.round(t * 100) / 100;
   }, [entries, numDays]);
@@ -179,7 +179,7 @@ export default function App() {
           const isWeekend = wd === 'Sa' || wd === 'So';
           const isFeier = e && e.special === 'sfpa';
           const holiday = isHoliday(state.year, state.month, day);
-          const hrs = e ? computeHours(e) : 0;
+          const hrs = e ? dayHours(e) : 0;
           const siteLabel = e ? siteWithAusfall(e) || e.site : '';
           let metaParts = [];
           if (e) {

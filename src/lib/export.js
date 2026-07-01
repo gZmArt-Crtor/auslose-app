@@ -3,7 +3,7 @@ import { MONTHS } from '../config/constants.js';
 import { COLUMNS as C, SIPO_COL, roleCol, ROW_OFFSET } from '../config/excelColumns.js';
 import { isHoliday, feiertagOverlap } from './holidays.js';
 import {
-  computeHours, shiftHours, nightHours, entryToTimeString, siteWithAusfall, isPureSpecial,
+  computeHours, dayHours, shiftHours, nightHours, entryToTimeString, siteWithAusfall, isPureSpecial,
 } from './hours.js';
 
 // Pure transform: takes the sheet1.xml string + one month of data, returns patched XML.
@@ -16,7 +16,7 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
   const zu = parseFloat(zuGuthaben) || 0;
   let total = 0;
   for (let d = 1; d <= numDays; d++) {
-    if (entries[d]) total += computeHours(entries[d]);
+    if (entries[d]) total += dayHours(entries[d]);
   }
   total = Math.round(total * 100) / 100;
   const abrechnung = Math.round((total + aus - zu) * 100) / 100;
@@ -66,9 +66,11 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
       else {
         const dayHol = isHoliday(year, month, d);
         const nextHol = isHoliday(year, month, d + 1);
+        // 8h daily minimum: any shortfall is added to shift 1's role column (surcharges unaffected).
+        const floorAdd = hrs > 0 ? Math.max(0, 8 - hrs) : 0;
 
         if (s1hrs > 0) {
-          setNum(`${roleCol(e.role)}${r}`, s1hrs);
+          setNum(`${roleCol(e.role)}${r}`, Math.round((s1hrs + floorAdd) * 100) / 100);
           if (dayHol || nextHol) {
             const rawOverlap = feiertagOverlap(e.startH || 7, e.startM || 0, e.endH || 15, e.endM || 30, dayHol, nextHol);
             const fh1 = Math.round(rawOverlap * 100) / 100;
@@ -79,12 +81,12 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
         if (e.doubleShift) {
           if (e.s2ausfall) {
             const base = roleCol(e.role) === SIPO_COL ? s1hrs : 0;
-            setNum(`${SIPO_COL}${r}`, Math.round((base + 8) * 100) / 100);
+            setNum(`${SIPO_COL}${r}`, Math.round((base + 8 + floorAdd) * 100) / 100);
           } else {
             const s2hrs = shiftHours(e.s2startH || 22, e.s2startM || 0, e.s2endH || 4, e.s2endM || 30, e.s2pause);
             if (s2hrs > 0) {
               const s2col = roleCol(e.s2role);
-              if (s2col === roleCol(e.role)) setNum(`${s2col}${r}`, Math.round((s1hrs + s2hrs) * 100) / 100);
+              if (s2col === roleCol(e.role)) setNum(`${s2col}${r}`, Math.round((s1hrs + s2hrs + floorAdd) * 100) / 100);
               else setNum(`${s2col}${r}`, s2hrs);
               if (dayHol || nextHol) {
                 const s2RawOverlap = feiertagOverlap(e.s2startH || 22, e.s2startM || 0, e.s2endH || 4, e.s2endM || 30, dayHol, nextHol);

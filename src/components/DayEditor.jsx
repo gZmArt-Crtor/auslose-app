@@ -130,7 +130,7 @@ export default function DayEditor({ day, numDays, year, month, weekday, weekdayF
               }
 
               const nightSegs = nightSegments(e.startH, e.startM, e.endH, e.endM);
-              const nightNet = nightHours(e.startH, e.startM, e.endH, e.endM, e.pause);
+              const nightNet = nightHours(e.startH, e.startM, e.endH, e.endM, e.pause, todayHol, nextHol);
               const hasNight = nightNet > 0;
 
               if (!feierStart && !hasNight) return null;

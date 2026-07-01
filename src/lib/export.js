@@ -3,7 +3,7 @@ import { MONTHS } from '../config/constants.js';
 import { COLUMNS as C, SIPO_COL, roleCol, ROW_OFFSET } from '../config/excelColumns.js';
 import { isHoliday, feiertagOverlap } from './holidays.js';
 import {
-  computeHours, dayHours, shiftHours, nightHours, entryToTimeString, siteWithAusfall, isPureSpecial,
+  computeHours, dayHours, shiftHours, nightHours, sundayHours, entryToTimeString, siteWithAusfall, isPureSpecial,
 } from './hours.js';
 
 // Pure transform: takes the sheet1.xml string + one month of data, returns patched XML.
@@ -53,6 +53,8 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
     const ts = entryToTimeString(e);
     if (ts) setStr(`${C.time}${r}`, ts);
     const pureSpecial = isPureSpecial(e);
+    const dayHol = isHoliday(year, month, d);
+    const nextHol = isHoliday(year, month, d + 1);
     if (e.pause && !pureSpecial) setNum(`${C.pause}${r}`, parseFloat(e.pause));
 
     const hrs = computeHours(e);
@@ -64,8 +66,6 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
       else if (e.special === 'schulung' || e.special === 'bahnarzt' || e.special === 'sfpa') { setNum(`${C.sfpa}${r}`, hrs); }
       else if (e.special === 'ausfall') { setNum(`${SIPO_COL}${r}`, 8); }
       else {
-        const dayHol = isHoliday(year, month, d);
-        const nextHol = isHoliday(year, month, d + 1);
         // 8h daily minimum: any shortfall is added to shift 1's role column (surcharges unaffected).
         const floorAdd = hrs > 0 ? Math.max(0, 8 - hrs) : 0;
 
@@ -104,13 +104,20 @@ export function patchSheetXml(xml, { name, pkw, month, year, numDays, entries, a
     }
     if (e.auslose) setNum(`${C.auslose}${r}`, Number(e.auslose));
 
-    const isSunday = new Date(year, month, d).getDay() === 0;
-    if (isSunday && hrs && !pureSpecial) setNum(`${C.sunday}${r}`, hrs);
+    // Sunday (SO): calendar-Sunday hours, split at midnight, minus holiday (holiday wins) and break.
+    const daySun = new Date(year, month, d).getDay() === 0;
+    const nextSun = new Date(year, month, d + 1).getDay() === 0;
+    if (!pureSpecial && e.startH !== undefined) {
+      let so = sundayHours(e.startH, e.startM, e.endH, e.endM, e.pause, daySun, nextSun, dayHol, nextHol);
+      if (e.doubleShift && !e.s2ausfall) so += sundayHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM, e.s2pause, daySun, nextSun, dayHol, nextHol);
+      if (so > 0) setNum(`${C.sunday}${r}`, so);
+    }
 
     if (!e.special && e.startH !== undefined) {
-      let totalNight = nightHours(e.startH, e.startM, e.endH, e.endM, e.pause);
+      // Night (NA): holiday hours are excluded (they count as F instead).
+      let totalNight = nightHours(e.startH, e.startM, e.endH, e.endM, e.pause, dayHol, nextHol);
       // Ausfall shift 2 has no real clock time, so it never contributes night hours.
-      if (e.doubleShift && !e.s2ausfall) totalNight += nightHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM, e.s2pause);
+      if (e.doubleShift && !e.s2ausfall) totalNight += nightHours(e.s2startH, e.s2startM, e.s2endH, e.s2endM, e.s2pause, dayHol, nextHol);
       if (totalNight > 0) setNum(`${C.night}${r}`, totalNight);
     }
   }

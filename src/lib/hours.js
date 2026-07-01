@@ -31,20 +31,53 @@ export function nightSegments(startH, startM, endH, endM) {
   return segs;
 }
 
-// Night hours, with the pause removed only for the part of the break that falls in the
-// night window. The break is taken 5h after shift start (HR rule), so it only reduces the
-// night surcharge when that time lands inside 22:00–06:00.
-export function nightHours(startH, startM, endH, endM, pause) {
-  const start = (+startH) + (+startM || 0) / 60;
-  const segs = nightSegments(startH, startM, endH, endM);
-  const p = parseFloat(pause) || 0;
-  const bStart = start + 5, bEnd = bStart + p; // break taken 5h into the shift
+// --- surcharge interval helpers (shifted clock: 24–30 = next-day 00:00–06:00) ---
+const ovl = (a0, a1, b0, b1) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
+
+// Holiday sub-intervals of a shift [start,end], split at midnight.
+function holoIntervals(start, end, dayHol, nextHol) {
+  const iv = [];
+  if (dayHol) iv.push([start, Math.min(end, 24)]);
+  if (nextHol && end > 24) iv.push([24, end]);
+  return iv;
+}
+
+// Sum of `segs` after removing the `excl` intervals and the break [bS,bE].
+function netHours(segs, excl, bS, bE) {
   let total = 0;
-  for (const seg of segs) {
-    const brk = Math.max(0, Math.min(seg.end, bEnd) - Math.max(seg.start, bStart)); // break ∩ segment
-    total += (seg.end - seg.start) - brk;
+  for (const [lo, hi] of segs) {
+    let pieces = [[lo, hi]];
+    for (const [eLo, eHi] of excl) {
+      pieces = pieces.flatMap(([plo, phi]) =>
+        (eHi <= plo || eLo >= phi) ? [[plo, phi]]
+          : [...(eLo > plo ? [[plo, eLo]] : []), ...(eHi < phi ? [[eHi, phi]] : [])]);
+    }
+    for (const [plo, phi] of pieces) total += (phi - plo) - ovl(plo, phi, bS, bE);
   }
   return total > 0 ? Math.round(total * 100) / 100 : 0;
+}
+
+// Night hours in the 22:00–06:00 window, excluding holiday hours (a holiday overrides night)
+// and the break. The break is taken 5h after shift start, so it only reduces the surcharge when
+// it lands in the non-holiday night window.
+export function nightHours(startH, startM, endH, endM, pause, dayHol = false, nextHol = false) {
+  const start = (+startH) + (+startM || 0) / 60;
+  let end = (+endH) + (+endM || 0) / 60; if (end <= start) end += 24;
+  const segs = nightSegments(startH, startM, endH, endM).map(s => [s.start, s.end]);
+  const p = parseFloat(pause) || 0;
+  return netHours(segs, holoIntervals(start, end, dayHol, nextHol), start + 5, start + 5 + p);
+}
+
+// Sunday hours (calendar Sunday, split at midnight), excluding holiday hours (holiday wins) and
+// the break. daySun / nextSun say whether day d and d+1 are Sundays.
+export function sundayHours(startH, startM, endH, endM, pause, daySun, nextSun, dayHol = false, nextHol = false) {
+  const start = (+startH) + (+startM || 0) / 60;
+  let end = (+endH) + (+endM || 0) / 60; if (end <= start) end += 24;
+  const segs = [];
+  if (daySun) segs.push([start, Math.min(end, 24)]);
+  if (nextSun && end > 24) segs.push([24, end]);
+  const p = parseFloat(pause) || 0;
+  return netHours(segs, holoIntervals(start, end, dayHol, nextHol), start + 5, start + 5 + p);
 }
 
 // Worked hours with the 8h daily minimum applied. Specials are already fixed at 8h.
